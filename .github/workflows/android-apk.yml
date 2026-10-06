@@ -1,0 +1,64 @@
+name: Build Android APK
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: android-apk
+  cancel-in-progress: true
+
+jobs:
+  apk:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 17
+
+      - uses: gradle/actions/setup-gradle@v4
+
+      - name: Install packages
+        run: npm ci
+
+      - name: Generate Android project
+        run: npx expo prebuild --platform android --no-install
+        env:
+          EXPO_OFFLINE: 1
+
+      - name: Build release APK
+        working-directory: android
+        run: ./gradlew assembleRelease -PreactNativeArchitectures=arm64-v8a,armeabi-v7a --no-daemon
+
+      - name: Name the APK
+        run: |
+          cp android/app/build/outputs/apk/release/app-release.apk Witlo-test-${{ github.run_number }}.apk
+          ls -lh Witlo-test-*.apk
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: Witlo-test-${{ github.run_number }}
+          path: Witlo-test-${{ github.run_number }}.apk
+
+      - name: Publish as a release (direct phone download)
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: test-${{ github.run_number }}
+          name: Witlo test build ${{ github.run_number }}
+          prerelease: true
+          files: Witlo-test-${{ github.run_number }}.apk
+          body: |
+            Test APK for Android. Open this page on your phone, tap the .apk below, then allow "install unknown apps" when asked.

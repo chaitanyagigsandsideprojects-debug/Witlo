@@ -1,0 +1,73 @@
+{
+  "expo": {
+    "name": "Witlo",
+    "slug": "witlo",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "icon": "./assets/icon.png",
+    "userInterfaceStyle": "automatic",
+    "ios": {
+      "supportsTablet": false,
+      "bundleIdentifier": "com.loganapps.witlo",
+      "infoPlist": {
+        "NSPhotoLibraryUsageDescription": "Witlo lets you pick a photo for your avatar. It stays on your phone."
+      }
+    },
+    "android": {
+      "package": "com.loganapps.witlo",
+      "adaptiveIcon": {
+        "backgroundColor": "#FED602",
+        "foregroundImage": "./assets/android-icon-foreground.png",
+        "monochromeImage": "./assets/android-icon-monochrome.png"
+      },
+      "blockedPermissions": [
+        "android.permission.READ_MEDIA_IMAGES",
+        "android.permission.READ_MEDIA_VIDEO",
+        "android.permission.READ_EXTERNAL_STORAGE",
+        "android.permission.WRITE_EXTERNAL_STORAGE",
+        "android.permission.RECORD_AUDIO",
+        "android.permission.CAMERA"
+      ]
+    },
+    "web": {
+      "favicon": "./assets/favicon.png"
+    },
+    "plugins": [
+      "expo-sharing",
+      "expo-font",
+      [
+        "expo-splash-screen",
+        {
+          "image": "./assets/splash-icon.png",
+          "imageWidth": 200,
+          "backgroundColor": "#FED602",
+          "dark": {
+            "image": "./assets/splash-icon.png",
+            "backgroundColor": "#FED602"
+          }
+        }
+      ],
+      [
+        "expo-notifications",
+        {
+          "color": "#FF7A45"
+        }
+      ],
+      [
+        "react-native-google-mobile-ads",
+        {
+          "androidAppId": "ca-app-pub-3940256099942544~3347511713",
+          "iosAppId": "ca-app-pub-3940256099942544~1458002511"
+        }
+      ],
+      [
+        "expo-image-picker",
+        {
+          "photosPermission": "Witlo lets you pick a photo for your avatar. It stays on your phone.",
+          "cameraPermission": false,
+          "microphonePermission": false
+        }
+      ]
+    ]
+  }
+}

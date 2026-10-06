@@ -1,0 +1,370 @@
+/* Quantitative aptitude templates */
+import { NAMES } from './core';
+
+const Q = (o) => ({ cat: 'quant', fast: true, deep: false, lv: [1, 3], ...o });
+const ITEMS = ['phone', 'laptop', 'watch', 'bicycle', 'jacket', 'mixer', 'speaker', 'backpack', 'sofa', 'fridge', 'scooter', 'camera', 'kurta', 'TV', 'printer'];
+const TRIPLES = [[3, 4, 5], [6, 8, 10], [5, 12, 13], [9, 12, 15], [8, 15, 17], [12, 16, 20], [7, 24, 25], [15, 20, 25], [10, 24, 26], [20, 21, 29], [9, 40, 41], [12, 35, 37], [18, 24, 30], [16, 30, 34], [21, 28, 35]];
+// pairs (a, b) whose combined work time ab/(a+b) is a whole number
+const WORK_PAIRS = []; for (let a = 2; a <= 72; a++) for (let b = a + 1; b <= 90; b++) if ((a * b) % (a + b) === 0) WORK_PAIRS.push([a, b, (a * b) / (a + b)]);
+const PIPE_PAIRS = []; for (let a = 2; a <= 40; a++) for (let b = a + 1; b <= 60; b++) if ((a * b) % (b - a) === 0 && (a * b) / (b - a) <= 120) PIPE_PAIRS.push([a, b, (a * b) / (b - a)]);
+const AVG_SPEED = []; for (let x = 10; x <= 90; x += 2) for (let y = x + 4; y <= 120; y += 2) if ((2 * x * y) % (x + y) === 0) AVG_SPEED.push([x, y, (2 * x * y) / (x + y)]);
+const PRIMES = [2, 3, 5, 7, 11, 13];
+
+export default [
+  // ---------------- Arithmetic speed ----------------
+  Q({ id: 'q.mental', sub: 'Mental math', lv: [1, 2], time: 8, gen(k, L) {
+    const t = k.pick(L === 1 ? ['mul', 'add', 'sq'] : ['mul', 'sq', 'x25', 'x11', 'div']);
+    if (t === 'add') { const a = k.ri(120, 899), b = k.ri(120, 899); return { prompt: 'Quick! Work it out', emph: `${a} + ${b}`, ans: a + b, wrong: [a + b + 10, a + b - 10, a + b + 100], step: 10, why: `${a} + ${b} = ${a + b}`, p: [t, a, b] }; }
+    if (t === 'mul') { const a = k.ri(12, L === 1 ? 19 : 39), b = k.ri(3, 9); return { prompt: 'Quick! Work it out', emph: `${a} × ${b}`, ans: a * b, wrong: [a * b + b, a * b - b, a * (b + 1)], step: b, why: `${a} × ${b} = ${a * b}`, p: [t, a, b] }; }
+    if (t === 'sq') { const a = k.ri(L === 1 ? 11 : 21, L === 1 ? 25 : 59); return { prompt: 'Square it', emph: `${a}²`, ans: a * a, wrong: [a * a + 10, a * a - 10, a * (a + 1)], step: 10, why: `${a} × ${a} = ${a * a}`, p: [t, a] }; }
+    if (t === 'x25') { const a = 4 * k.ri(5, 60); return { prompt: 'Shortcut time', emph: `${a} × 25`, ans: a * 25, wrong: [a * 25 + 100, a * 25 - 100, a * 20], step: 50, why: `× 25 = × 100 ÷ 4 → ${a * 100} ÷ 4 = ${a * 25}`, p: [t, a] }; }
+    if (t === 'x11') { const a = k.ri(12, 98); return { prompt: 'Shortcut time', emph: `${a} × 11`, ans: a * 11, wrong: [a * 11 + 10, a * 11 - 10, a * 10 + 11], step: 10, why: `${a} × 11 = ${a * 10} + ${a} = ${a * 11}`, p: [t, a] }; }
+    const b = k.ri(6, 19), c = k.ri(12, 49); return { prompt: 'Quick! Work it out', emph: `${b * c} ÷ ${b}`, ans: c, wrong: [c + 1, c - 1, c + 2], why: `${b} × ${c} = ${b * c}`, p: [t, b, c] };
+  } }),
+  Q({ id: 'q.approx', sub: 'Approximation', lv: [2, 3], time: 15, gen(k, L) {
+    const p = k.pick([10, 20, 25, 30, 40, 50, 60, 75]); const base = 100 * k.ri(3, 30); const n = base + k.pick([1, -1, 2, -2]);
+    const pp = p + k.pick([0.2, -0.2, 0.1, -0.1]); const ans = (p * base) / 100;
+    return { prompt: `Closest value of ${pp}% of ${n}?`, ans, wrong: [ans * 2, ans / 2, ans + base / 10, ans - base / 10].filter(Number.isInteger), step: Math.max(5, ans / 5), why: `≈ ${p}% of ${base} = ${ans}`, p: [p, n, pp] };
+  } }),
+  Q({ id: 'q.fraction', sub: 'Fractions', lv: [2, 3], time: 20, gen(k) {
+    const fr = new Set(); while (fr.size < 4) { const d = k.ri(3, 13); const n = k.ri(1, d - 1); if (k.gcd(n, d) === 1) fr.add(`${n}/${d}`); }
+    const list = [...fr]; const val = (s) => { const [a, b] = s.split('/').map(Number); return a / b; };
+    const vals = list.map(val); if (new Set(vals.map((v) => v.toFixed(6))).size < 4) return null;
+    const big = k.chance(0.5); const ans = list[vals.indexOf(big ? Math.max(...vals) : Math.min(...vals))];
+    return { prompt: `Which fraction is the ${big ? 'largest' : 'smallest'}?`, ans, opts: list, why: list.map((s) => `${s}≈${val(s).toFixed(2)}`).join(', '), p: list };
+  } }),
+
+  // ---------------- Percentages ----------------
+  Q({ id: 'q.pct.of', sub: 'Percentages', lv: [1, 2], time: 10, gen(k, L) {
+    let p, b, a; do { p = k.pick(L === 1 ? [10, 20, 25, 50, 5] : [12, 15, 30, 35, 40, 45, 60, 75, 80, 120, 150]); b = k.pick([40, 60, 80, 120, 160, 200, 240, 300, 360, 400, 480, 640, 720, 800, 1200, 2500]); a = (p * b) / 100; } while (!Number.isInteger(a));
+    return { prompt: 'What is', emph: `${p}% of ${b}`, ans: a, wrong: [a * 10, (p * b) / 1000, b - a, a + p], why: `${p}/100 × ${b} = ${a}`, p: [p, b] };
+  } }),
+  Q({ id: 'q.pct.what', sub: 'Percentages', lv: [1, 2], time: 12, gen(k) {
+    let p, b, a; do { p = k.pick([5, 10, 20, 25, 30, 40, 50, 60, 75, 80, 125, 150]); b = k.pick([40, 80, 120, 160, 200, 240, 400, 600, 800]); a = (p * b) / 100; } while (!Number.isInteger(a));
+    return { prompt: `${a} is what percent of ${b}?`, ans: p, post: '%', wrong: [100 - p, p / 2, p * 2, p + 10], step: 5, why: `${a} ÷ ${b} × 100 = ${p}%`, p: [a, b] };
+  } }),
+  Q({ id: 'q.pct.change', sub: 'Percentages', lv: [1, 3], time: 15, gen(k, L) {
+    const up = k.chance(0.5); let p, b, n; do { p = k.pick([5, 8, 10, 12, 15, 20, 25, 30, 40]); b = 50 * k.ri(4, 400); n = b + ((up ? 1 : -1) * p * b) / 100; } while (!Number.isInteger(n));
+    const it = k.pick(ITEMS);
+    return { prompt: `A ${it} costs ₹${k.fmtIN(b)}. Its price ${up ? 'rises' : 'falls'} by ${p}%. New price?`, ans: n, pre: '₹', wrong: [b + ((up ? -1 : 1) * p * b) / 100, (p * b) / 100, b + (up ? p : -p)], step: Math.max(10, (p * b) / 400), why: `${up ? '+' : '−'}${p}% of ${k.fmtIN(b)} = ${k.fmtIN((p * b) / 100)}`, p: [up, p, b] };
+  } }),
+  Q({ id: 'q.pct.succ', sub: 'Percentages', lv: [2, 3], time: 25, gen(k) {
+    const a = k.pick([10, 20, 25, 30, 40, 50]); const b = k.pick([10, 20, 25, 30, 40, 50]); const s1 = k.chance(0.5) ? 1 : -1; const s2 = k.chance(0.6) ? -1 : 1;
+    const net = s1 * a + s2 * b + (s1 * a * s2 * b) / 100; if (!Number.isInteger(net * 10)) return null;
+    const word = (s) => (s > 0 ? 'increased' : 'decreased');
+    return { prompt: `A price is ${word(s1)} by ${a}% and then ${word(s2)} by ${b}%. Net change?`, ans: net, post: '%', wrong: [s1 * a + s2 * b, net + 5, -net, net - 5], step: 2, why: `${k.sn(s1 * a)} + (${k.sn(s2 * b)}) + (${k.sn(s1 * a)}×${k.sn(s2 * b)})/100 = ${k.sn(net)}%`, steps: 'Successive change formula: a + b + ab/100 (use negative values for decreases).', p: [s1 * a, s2 * b] };
+  } }),
+  Q({ id: 'q.pct.rev', sub: 'Percentages', lv: [2, 3], time: 25, gen(k) {
+    const p = k.pick([10, 20, 25, 50, 60]); const orig = 20 * k.ri(5, 100); const now = orig * (1 + p / 100); if (!Number.isInteger(now)) return null;
+    return { prompt: `After a ${p}% increase, a salary is ₹${k.fmtIN(now)}. What was it before?`, ans: orig, pre: '₹', wrong: [now - (p * now) / 100, now - p * 10, Math.round(now * 0.9)].filter(Number.isInteger), step: Math.max(20, orig / 10), why: `${k.fmtIN(now)} ÷ ${1 + p / 100} = ${k.fmtIN(orig)}`, steps: `Original × ${(100 + p) / 100} = ${now}, so original = ${now} × 100/${100 + p}.`, p: [p, orig] };
+  } }),
+  Q({ id: 'q.pct.pop', sub: 'Percentages', lv: [3, 3], deep: true, time: 40, gen(k) {
+    const r = k.pick([10, 20]); const P = 1000 * k.ri(10, 90); const ans = P * (1 + r / 100) ** 2;
+    return { prompt: `A town's population of ${k.fmtIN(P)} grows ${r}% every year. Population after 2 years?`, ans: Math.round(ans), wrong: [P + (2 * r * P) / 100, Math.round(ans) + 1000, Math.round(ans) - 1000], step: 1000, why: `${k.fmtIN(P)} × ${(1 + r / 100).toFixed(1)}² = ${k.fmtIN(Math.round(ans))}`, steps: 'Growth compounds: multiply by (1 + r/100) once for each year.', p: [r, P] };
+  } }),
+
+  // ---------------- Profit, loss, discount ----------------
+  Q({ id: 'q.pl.sp', sub: 'Profit & Loss', lv: [1, 2], time: 15, gen(k, L) {
+    const loss = L >= 2 && k.chance(0.4); let cp, p, sp; do { cp = 50 * k.ri(4, 200); p = k.pick([5, 10, 12, 15, 20, 25, 30, 40, 50]); sp = cp + ((loss ? -1 : 1) * cp * p) / 100; } while (!Number.isInteger(sp));
+    return { prompt: `Bought for ₹${k.fmtIN(cp)}, sold at a ${p}% ${loss ? 'loss' : 'profit'}. Selling price?`, ans: sp, pre: '₹', wrong: [cp - ((loss ? -1 : 1) * cp * p) / 100, (cp * p) / 100, cp + (loss ? -p : p)], step: Math.max(10, (cp * p) / 300), why: `${k.fmtIN(cp)} ${loss ? '−' : '+'} ${p}% = ₹${k.fmtIN(sp)}`, p: [loss, cp, p] };
+  } }),
+  Q({ id: 'q.pl.pct', sub: 'Profit & Loss', lv: [2, 2], time: 18, gen(k) {
+    const loss = k.chance(0.4); let cp, p, sp; do { cp = 25 * k.ri(4, 200); p = k.pick([5, 10, 12.5, 15, 20, 25, 30, 40]); sp = cp + ((loss ? -1 : 1) * cp * p) / 100; } while (!Number.isInteger(sp));
+    return { prompt: `Bought for ₹${k.fmtIN(cp)}, sold for ₹${k.fmtIN(sp)}. ${loss ? 'Loss' : 'Profit'} percent?`, ans: p, post: '%', wrong: [Math.round((Math.abs(sp - cp) / sp) * 1000) / 10, p + 5, p * 2], step: 5, why: `${k.fmtIN(Math.abs(sp - cp))} ÷ ${k.fmtIN(cp)} × 100 = ${p}%`, p: [loss, cp, p] };
+  } }),
+  Q({ id: 'q.pl.cp', sub: 'Profit & Loss', lv: [2, 3], time: 25, gen(k) {
+    const p = k.pick([10, 20, 25, 50]); const cp = 40 * k.ri(5, 150); const sp = cp * (1 + p / 100);
+    return { prompt: `By selling a ${k.pick(ITEMS)} for ₹${k.fmtIN(sp)}, a dealer gains ${p}%. Cost price?`, ans: cp, pre: '₹', wrong: [sp - (sp * p) / 100, sp - p * 10, cp + 40].filter(Number.isInteger), step: Math.max(20, cp / 10), why: `${k.fmtIN(sp)} × 100/${100 + p} = ₹${k.fmtIN(cp)}`, steps: 'Profit % is on cost price, so CP = SP × 100/(100 + profit%). Taking p% of SP is the common trap.', p: [p, cp] };
+  } }),
+  Q({ id: 'q.disc', sub: 'Discounts', lv: [1, 2], time: 12, gen(k) {
+    let mp, d, sp; do { mp = 100 * k.ri(2, 600); d = k.pick([5, 10, 12, 15, 20, 25, 30, 40, 50, 60]); sp = mp - (mp * d) / 100; } while (!Number.isInteger(sp));
+    return { prompt: `A ${k.pick(ITEMS)} marked ₹${k.fmtIN(mp)} has ${d}% off. You pay?`, ans: sp, pre: '₹', wrong: [(mp * d) / 100, mp - d * 10, mp + (mp * d) / 100], step: Math.max(10, mp / 50), why: `${d}% of ${k.fmtIN(mp)} = ${k.fmtIN((mp * d) / 100)} off`, p: [mp, d] };
+  } }),
+  Q({ id: 'q.disc.succ', sub: 'Discounts', lv: [2, 3], time: 22, gen(k) {
+    const a = k.pick([10, 20, 25, 30, 40, 50]), b = k.pick([10, 20, 25, 40, 50]); const eq = a + b - (a * b) / 100;
+    return { prompt: `Two successive discounts of ${a}% and ${b}% equal a single discount of`, ans: eq, post: '%', wrong: [a + b, eq + 5, eq - 5, (a * b) / 10], step: 2, why: `${a} + ${b} − ${a}×${b}/100 = ${eq}%`, p: [a, b] };
+  } }),
+  Q({ id: 'q.disc.markup', sub: 'Discounts', lv: [3, 4], deep: true, time: 40, gen(k) {
+    const m = k.pick([20, 25, 30, 40, 50, 60]); const d = k.pick([10, 20, 25]); const net = m - d - (m * d) / 100; if (!Number.isInteger(net * 10) || net <= 0) return null;
+    return { prompt: `A shop marks goods ${m}% above cost, then gives a ${d}% discount. Profit percent?`, ans: net, post: '%', wrong: [m - d, net + 5, net - 2], step: 2, why: `${(1 + m / 100).toFixed(2)} × ${(1 - d / 100).toFixed(2)} = ${(1 + net / 100).toFixed(3).replace(/0$/, '')} → ${net}% profit`, steps: `Take cost = 100. Marked = ${100 + m}. After ${d}% off: ${100 + m} × ${(100 - d) / 100} = ${100 + net}. Profit = ${net}%.`, p: [m, d] };
+  } }),
+
+  // ---------------- Ratio, averages, mixtures ----------------
+  Q({ id: 'q.ratio.share', sub: 'Ratio & Proportion', lv: [1, 2], time: 15, gen(k) {
+    const a = k.ri(1, 7); let b = k.ri(1, 8); if (b === a) b++; const u = 10 * k.ri(2, 90); const tot = u * (a + b); const [x, y] = k.pickN(NAMES, 2); const first = k.chance(0.5); const ans = (first ? a : b) * u;
+    return { prompt: `₹${k.fmtIN(tot)} is split between ${x} and ${y} in the ratio ${a}:${b}. ${first ? x : y} gets?`, ans, pre: '₹', wrong: [(first ? b : a) * u, tot / 2, ans + u], step: u, why: `${k.fmtIN(tot)} ÷ ${a + b} = ${u}; × ${first ? a : b}`, p: [a, b, u, first] };
+  } }),
+  Q({ id: 'q.ratio.comb', sub: 'Ratio & Proportion', lv: [2, 3], time: 25, gen(k) {
+    const a = k.ri(1, 9), b = k.ri(1, 9), c = k.ri(1, 9), d = k.ri(1, 9); const A = a * c, C = b * d; const g = k.gcd(A, C); if (A / g === C / g) return null;
+    const ans = `${A / g}:${C / g}`;
+    return { prompt: `A:B = ${a}:${b} and B:C = ${c}:${d}. Find A:C.`, ans, wrong: [`${a}:${d}`, `${C / g}:${A / g}`, `${a * d}:${b * c}`, `${a + c}:${b + d}`].filter((x) => x !== ans), why: `A:C = ${a}×${c} : ${b}×${d} = ${ans}`, p: [a, b, c, d] };
+  } }),
+  Q({ id: 'q.ratio.add', sub: 'Ratio & Proportion', lv: [3, 3], deep: true, time: 40, gen(k) {
+    const p = k.ri(1, 5); const q = p + k.ri(1, 4); const x = k.ri(2, 15); const m = k.ri(2, 6); const A = p * m * 2 - x, B = q * m * 2 - x; if (A <= 0 || B <= 0 || A === B) return null;
+    return { prompt: `What number must be added to both ${A} and ${B} so that they are in the ratio ${p}:${q}?`, ans: x, wrong: [x + 1, x - 1, x + 2, 2 * x], step: 1, why: `(${A}+${x}):(${B}+${x}) = ${A + x}:${B + x} = ${p}:${q}`, steps: `Solve (${A}+x)/(${B}+x) = ${p}/${q}: ${q}(${A}+x) = ${p}(${B}+x) → x = ${x}.`, p: [A, B, p, q] };
+  } }),
+  Q({ id: 'q.avg', sub: 'Averages', lv: [1, 2], time: 15, gen(k, L) {
+    const n = L === 1 ? 3 : k.pick([4, 5]); const avg = k.ri(10, 90); const nums = []; let rest = 0;
+    for (let i = 0; i < n - 1; i++) { const v = avg + k.ri(-12, 12); nums.push(v); rest += v - avg; } nums.push(avg - rest); if (nums.some((x) => x <= 0)) return null;
+    const sum = nums.reduce((a, b) => a + b, 0);
+    return { prompt: 'Average of', emph: nums.join(', '), ans: avg, wrong: [avg + 1, avg - 1, Math.round(sum / (n + 1))], step: 2, why: `${sum} ÷ ${n} = ${avg}`, p: nums };
+  } }),
+  Q({ id: 'q.avg.new', sub: 'Averages', lv: [2, 3], time: 30, gen(k) {
+    const n = k.ri(5, 30); const a = k.ri(20, 60); const b = a + k.pick([1, 2, 3, -1, -2]); const x = b * (n + 1) - a * n; if (x <= 0) return null;
+    const what = k.pick([['students', 'marks', 'student'], ['players', 'age', 'player'], ['workers', 'daily wage (₹)', 'worker']]);
+    return { prompt: `The average ${what[1]} of ${n} ${what[0]} is ${a}. A new ${what[2]} joins and the average becomes ${b}. The new ${what[2]}'s ${what[1]}?`, ans: x, wrong: [b, a + (b - a) * n, x + (b - a)], step: 2, why: `${b}×${n + 1} − ${a}×${n} = ${x}`, steps: `New total − old total = ${b * (n + 1)} − ${a * n} = ${x}.`, p: [n, a, b] };
+  } }),
+  Q({ id: 'q.mix.allig', sub: 'Mixtures & Alligation', lv: [3, 3], deep: true, time: 45, gen(k) {
+    const c1 = 10 * k.ri(4, 15); const c2 = c1 + 10 * k.ri(2, 8); const m = c1 + 10 * k.ri(1, (c2 - c1) / 10 - 1); const r1 = c2 - m, r2 = m - c1; const g = k.gcd(r1, r2);
+    const ans = `${r1 / g}:${r2 / g}`; const it = k.pick(['rice', 'tea', 'sugar', 'dal', 'coffee']);
+    return { prompt: `In what ratio must ${it} at ₹${c1}/kg be mixed with ${it} at ₹${c2}/kg to get a mix worth ₹${m}/kg?`, ans, wrong: [`${r2 / g}:${r1 / g}`, `${c1 / 10}:${c2 / 10}`, `${r1 / g + 1}:${r2 / g}`, '1:1'].filter((x) => x !== ans), why: `(${c2}−${m}) : (${m}−${c1}) = ${ans}`, steps: 'Alligation: cheaper : dearer = (dearer − mean) : (mean − cheaper).', p: [c1, c2, m] };
+  } }),
+  Q({ id: 'q.mix.water', sub: 'Mixtures & Alligation', lv: [3, 4], deep: true, time: 60, gen(k) {
+    const a = k.ri(2, 7), b = k.ri(1, 4); if (k.gcd(a, b) !== 1) return null; const u = k.ri(3, 12); const tot = (a + b) * u; const nb = b + k.ri(1, 3); if (k.gcd(a, nb) !== 1) return null; const add = (a * u * nb) / a - b * u; if (!Number.isInteger(add) || add <= 0) return null;
+    return { prompt: `${tot} litres of a mixture has milk and water in the ratio ${a}:${b}. How much water must be added to make it ${a}:${nb}?`, ans: add, post: ' L', wrong: [add + u, add - 1, (nb - b) * 2, tot / (a + b)].filter((v) => v > 0), step: Math.max(1, u / 2), why: `Milk ${a * u} L stays; water must be ${nb * u} L → add ${add} L`, steps: `Milk = ${a * u} L, water = ${b * u} L. For ${a}:${nb}, water = ${a * u} × ${nb}/${a} = ${nb * u} L. Add ${nb * u} − ${b * u} = ${add} L.`, p: [a, b, u, nb] };
+  } }),
+
+  // ---------------- Interest ----------------
+  Q({ id: 'q.si', sub: 'Simple Interest', lv: [1, 2], time: 15, gen(k) {
+    let P, R, T, si; do { P = 500 * k.ri(2, 80); R = k.ri(3, 15); T = k.ri(1, 6); si = (P * R * T) / 100; } while (!Number.isInteger(si));
+    return { prompt: `₹${k.fmtIN(P)} at ${R}% simple interest for ${T} year${T > 1 ? 's' : ''}. Interest?`, ans: si, pre: '₹', wrong: [P + si, (P * R) / 100, si + (P * R) / 100], step: Math.max(10, si / 10), why: `${k.fmtIN(P)} × ${R} × ${T} ÷ 100 = ${k.fmtIN(si)}`, p: [P, R, T] };
+  } }),
+  Q({ id: 'q.si.rate', sub: 'Simple Interest', lv: [2, 3], time: 25, gen(k) {
+    const R = k.ri(4, 20); const T = k.ri(2, 8); const P = 1000 * k.ri(1, 50); const si = (P * R * T) / 100;
+    return { prompt: `A sum of ₹${k.fmtIN(P)} earns ₹${k.fmtIN(si)} simple interest in ${T} years. Rate per year?`, ans: R, post: '%', wrong: [R * T, R + 1, R - 1, R + 2].filter((v) => v > 0), step: 1, why: `${k.fmtIN(si)} × 100 ÷ (${k.fmtIN(P)} × ${T}) = ${R}%`, p: [P, R, T] };
+  } }),
+  Q({ id: 'q.ci', sub: 'Compound Interest', lv: [2, 3], time: 30, gen(k) {
+    const R = k.pick([5, 10, 20, 15]); const P = (R === 15 ? 400 : 100) * k.ri(10, 150); const T = 2; const A = P * (1 + R / 100) ** T; if (!k.isInt(A)) return null; const ci = Math.round(A - P);
+    const askAmt = k.chance(0.4);
+    return { prompt: `₹${k.fmtIN(P)} at ${R}% compound interest (yearly) for 2 years. ${askAmt ? 'Total amount' : 'Interest earned'}?`, ans: askAmt ? Math.round(A) : ci, pre: '₹', wrong: askAmt ? [P + (2 * P * R) / 100, Math.round(A) + 100, Math.round(A) - 50] : [(2 * P * R) / 100, ci + (P * R * R) / 10000 + 10, Math.round(A)], step: Math.max(10, ci / 10), why: `${k.fmtIN(P)} × ${(1 + R / 100).toFixed(2)}² = ${k.fmtIN(Math.round(A))}`, steps: `Year 1: ${k.fmtIN(P)} → ${k.fmtIN(P * (1 + R / 100))}. Year 2: → ${k.fmtIN(Math.round(A))}. Interest = ${k.fmtIN(ci)}.`, p: [P, R, askAmt] };
+  } }),
+  Q({ id: 'q.ci.diff', sub: 'Compound Interest', lv: [3, 4], deep: true, time: 45, gen(k) {
+    const R = k.pick([5, 10, 4, 8, 20]); const P = 100 * k.ri(10, 200); const d = (P * R * R) / 10000; if (!Number.isInteger(d)) return null;
+    return { prompt: `Difference between compound and simple interest on ₹${k.fmtIN(P)} for 2 years at ${R}% per year?`, ans: d, pre: '₹', wrong: [(P * R) / 100, 2 * d, d + 10, (P * R * 2) / 100], step: Math.max(2, d / 4), why: `P × (R/100)² = ${k.fmtIN(P)} × (${R}/100)² = ${d}`, steps: 'For 2 years, CI − SI = P(R/100)², the interest earned on the first year\'s interest.', p: [P, R] };
+  } }),
+
+  // ---------------- Time & work, pipes ----------------
+  Q({ id: 'q.work.tog', sub: 'Time & Work', lv: [2, 3], time: 22, gen(k, L) {
+    const pool = WORK_PAIRS.filter(([a, b]) => (L === 2 ? b <= 30 : b > 12)); const [a, b, t] = k.pick(pool); const [x, y] = k.pickN(NAMES, 2);
+    return { prompt: `${x} can finish a job in ${a} days and ${y} in ${b} days. Working together?`, ans: t, post: ' days', wrong: [(a + b) / 2, a + b, t + 1, t - 1].filter((v) => v > 0 && Number.isInteger(v)), step: 1, why: `1/${a} + 1/${b} = 1/${t}`, steps: `Per day they do 1/${a} + 1/${b} = ${(a + b) / k.gcd(a + b, a * b)}/${(a * b) / k.gcd(a + b, a * b)} of the job, so ${t} days.`, p: [a, b] };
+  } }),
+  Q({ id: 'q.work.alone', sub: 'Time & Work', lv: [3, 3], deep: true, time: 40, gen(k) {
+    const [a, b, t] = k.pick(WORK_PAIRS.filter((x) => x[1] <= 60)); const [x, y] = k.pickN(NAMES, 2);
+    return { prompt: `${x} and ${y} together finish a job in ${t} days. ${x} alone takes ${a} days. How long would ${y} take alone?`, ans: b, post: ' days', wrong: [a - t, a + t, b + t, 2 * t].filter((v) => v > 1), step: 2, why: `1/${t} − 1/${a} = 1/${b}`, p: [a, t] };
+  } }),
+  Q({ id: 'q.work.eff', sub: 'Time & Work', lv: [3, 4], deep: true, time: 50, gen(k) {
+    const m = k.ri(2, 4); const t = m * k.ri(1, 5); const b = t * (m + 1); const a = b / m; const [x, y] = k.pickN(NAMES, 2);
+    return { prompt: `${x} is ${m} times as efficient as ${y}. Together they finish a job in ${t} days. How many days would ${y} take alone?`, ans: b, post: ' days', wrong: [a, t * m, b + t, b - 1], step: 2, why: `${y} does 1 part, ${x} ${m} parts → ${y} alone: ${t} × ${m + 1} = ${b}`, p: [m, t] };
+  } }),
+  Q({ id: 'q.pipes', sub: 'Pipes & Cisterns', lv: [2, 3], time: 30, gen(k, L) {
+    if (L === 2) { const [a, b, t] = k.pick(WORK_PAIRS.filter((x) => x[1] <= 40)); return { prompt: `Pipe A fills a tank in ${a} hours, pipe B in ${b} hours. Both open together?`, ans: t, post: ' h', wrong: [(a + b) / 2, a + b, t + 1, b - a].filter((v) => v > 0 && Number.isInteger(v)), step: 1, why: `1/${a} + 1/${b} = 1/${t}`, p: ['f', a, b] }; }
+    const [a, b, t] = k.pick(PIPE_PAIRS);
+    return { prompt: `A pipe fills a tank in ${a} hours; a leak empties it in ${b} hours. With both working, the tank fills in?`, ans: t, post: ' h', wrong: [b - a, (a * b) / (a + b), t + a, t - 1].filter((v) => v > 0 && Number.isInteger(v)), step: 2, why: `1/${a} − 1/${b} = 1/${t}`, p: ['l', a, b] };
+  } }),
+
+  // ---------------- Speed, trains, boats, races ----------------
+  Q({ id: 'q.tsd', sub: 'Time, Speed & Distance', lv: [1, 2], time: 12, gen(k, L) {
+    const [who, sp] = k.pick([['A train', [40, 45, 50, 60, 72, 80, 90, 120]], ['A car', [30, 40, 50, 60, 70, 80]], ['A bus', [30, 35, 40, 45, 50]], ['A cyclist', [10, 12, 15, 18, 20]]]);
+    const v = k.pick(sp); const h = k.ri(2, 9); const d = v * h; const t = L === 1 ? 'dist' : k.pick(['dist', 'time', 'speed']);
+    if (t === 'dist') return { prompt: `${who} goes at ${v} km/h for ${h} hours. Distance?`, ans: d, post: ' km', wrong: [v + h, d + v, d - v], step: v, why: `${v} × ${h} = ${d} km`, p: [t, v, h] };
+    if (t === 'time') return { prompt: `${who} covers ${d} km at ${v} km/h. Time taken?`, ans: h, post: ' h', wrong: [h + 1, h - 1, h + 2].filter((x) => x > 0), why: `${d} ÷ ${v} = ${h} h`, p: [t, v, h] };
+    return { prompt: `${who} covers ${d} km in ${h} hours. Speed?`, ans: v, post: ' km/h', wrong: [v + 5, v - 5, v + 10], step: 5, why: `${d} ÷ ${h} = ${v} km/h`, p: [t, v, h] };
+  } }),
+  Q({ id: 'q.tsd.units', sub: 'Time, Speed & Distance', lv: [1, 2], time: 10, gen(k) {
+    const toMs = k.chance(0.5); const kmh = 18 * k.ri(1, 8);
+    if (toMs) return { prompt: 'Convert to metres per second', emph: `${kmh} km/h`, ans: (kmh * 5) / 18, post: ' m/s', wrong: [(kmh * 18) / 5, kmh / 3.6 + 5, kmh / 2], step: 5, why: `${kmh} × 5/18 = ${(kmh * 5) / 18} m/s`, p: [1, kmh] };
+    return { prompt: 'Convert to km per hour', emph: `${(kmh * 5) / 18} m/s`, ans: kmh, post: ' km/h', wrong: [(kmh * 25) / 324 * 18, kmh + 18, kmh / 2].map(Math.round), step: 18, why: `${(kmh * 5) / 18} × 18/5 = ${kmh} km/h`, p: [0, kmh] };
+  } }),
+  Q({ id: 'q.tsd.avg', sub: 'Time, Speed & Distance', lv: [2, 3], time: 30, gen(k) {
+    const [x, y, a] = k.pick(AVG_SPEED);
+    return { prompt: `You drive to a town at ${x} km/h and return the same way at ${y} km/h. Average speed for the trip?`, ans: a, post: ' km/h', wrong: [(x + y) / 2, a + 2, a - 2].filter(Number.isInteger), step: 2, why: `2×${x}×${y} ÷ (${x}+${y}) = ${a}`, steps: 'Same distance both ways → average speed = 2xy/(x+y), not the simple average.', p: [x, y] };
+  } }),
+  Q({ id: 'q.train.pole', sub: 'Trains', lv: [2, 3], time: 25, gen(k, L) {
+    const v = 18 * k.ri(2, 6); const ms = (v * 5) / 18; const t = k.ri(6, 20); const len = ms * t; const plat = L >= 3 ? 50 * k.ri(2, 8) : 0; const tt = (len + plat) / ms; if (!Number.isInteger(tt)) return null;
+    if (!plat) return { prompt: `A ${len} m long train runs at ${v} km/h. Time to cross a pole?`, ans: t, post: ' s', wrong: [Math.round(len / v), t + 2, t * 2].filter((x) => x > 0), step: 1, why: `${v} km/h = ${ms} m/s; ${len} ÷ ${ms} = ${t} s`, p: [v, t] };
+    return { prompt: `A ${len} m train at ${v} km/h crosses a ${plat} m platform in how long?`, ans: tt, post: ' s', wrong: [t, tt + 5, Math.round(plat / ms)], step: 2, why: `(${len} + ${plat}) ÷ ${ms} = ${tt} s`, steps: 'Crossing a platform means covering train length + platform length.', p: [v, t, plat] };
+  } }),
+  Q({ id: 'q.train.rel', sub: 'Trains', lv: [3, 4], deep: true, time: 50, gen(k) {
+    const v1 = 18 * k.ri(2, 5), v2 = 18 * k.ri(1, 4); const opp = k.chance(0.6); const rel = opp ? v1 + v2 : v1 - v2; if (rel <= 0) return null; const ms = (rel * 5) / 18; const t = k.ri(6, 24); const total = ms * t; const l1 = 10 * k.ri(5, Math.floor(total / 10) - 3); const l2 = total - l1; if (l2 < 50) return null;
+    return { prompt: `Trains of ${l1} m and ${l2} m run ${opp ? 'towards each other' : 'in the same direction'} at ${v1} and ${v2} km/h. Time to cross each other completely?`, ans: t, post: ' s', wrong: [Math.round(total / (((opp ? v1 - v2 : v1 + v2) * 5) / 18)) || t + 7, t + 3, t * 2].filter((x) => x > 0), step: 2, why: `relative ${rel} km/h = ${ms} m/s; ${total} ÷ ${ms} = ${t}`, steps: `${opp ? 'Opposite directions: add speeds' : 'Same direction: subtract speeds'} → ${rel} km/h. Distance = sum of lengths = ${total} m.`, p: [v1, v2, opp, l1, t] };
+  } }),
+  Q({ id: 'q.boat', sub: 'Boats & Streams', lv: [2, 3], time: 30, gen(k) {
+    const b = k.ri(6, 20), s = k.ri(1, 5); if (s >= b) return null; const askBoat = k.chance(0.5);
+    return { prompt: `A boat goes ${b + s} km/h downstream and ${b - s} km/h upstream. Speed of the ${askBoat ? 'boat in still water' : 'stream'}?`, ans: askBoat ? b : s, post: ' km/h', wrong: (askBoat ? [s, b + s, b - s, b + 1] : [b, 2 * s, s + 1, s + 2]).filter((v) => v > 0), why: askBoat ? `(${b + s} + ${b - s}) ÷ 2 = ${b}` : `(${b + s} − ${b - s}) ÷ 2 = ${s}`, p: [b, s, askBoat] };
+  } }),
+  Q({ id: 'q.race', sub: 'Races', lv: [3, 4], deep: true, time: 45, gen(k) {
+    const x = k.pick([5, 10, 20, 25, 4, 8]), y = k.pick([5, 10, 20, 25, 4, 8]); const c = 100 - ((100 - x) * (100 - y)) / 100; if (!k.isInt(c)) return null;
+    return { prompt: `In a 100 m race, A beats B by ${x} m and B beats C by ${y} m. By how much does A beat C?`, ans: c, post: ' m', wrong: [x + y, c + 1, c - 1, Math.abs(x - y) || x + 3], step: 1, why: `When A runs 100, C runs ${100 - x} × ${(100 - y) / 100} = ${100 - c}`, steps: `B runs ${100 - x} m while A runs 100. C runs ${(100 - y) / 100} of B's distance → ${100 - c} m. A wins by ${c} m.`, p: [x, y] };
+  } }),
+
+  // ---------------- Ages ----------------
+  Q({ id: 'q.ages', sub: 'Ages', lv: [1, 2], time: 18, gen(k, L) {
+    if (L >= 2 && k.chance(0.5)) { const s = k.ri(4, 15); const m = k.pick([2, 3, 4]); const sum = s * (m + 1); return { prompt: `A mother is ${m} times as old as her son. Their ages add up to ${sum}. Son's age?`, ans: s, wrong: [s * m, sum / m, s + 2].filter(Number.isInteger), why: `${sum} ÷ ${m + 1} = ${s}`, p: ['m', s, m] }; }
+    const b = k.ri(6, 40); const d = k.ri(2, 15); const sum = 2 * b + d; const [x, y] = k.pickN(NAMES, 2);
+    return { prompt: `${x} is ${d} years older than ${y}. Together they are ${sum}. How old is ${y}?`, ans: b, wrong: [b + d, sum / 2, b - 1].filter(Number.isInteger), why: `(${sum} − ${d}) ÷ 2 = ${b}`, p: ['d', b, d] };
+  } }),
+  Q({ id: 'q.ages.ratio', sub: 'Ages', lv: [3, 4], deep: true, time: 50, gen(k) {
+    const a = k.ri(2, 7), b = k.ri(1, 6); if (a <= b || k.gcd(a, b) !== 1) return null; const u = k.ri(3, 9); const n = k.ri(2, 12); const A = a * u + n, B = b * u + n; const g = k.gcd(A, B);
+    if (A / g === a) return null; const [x, y] = k.pickN(NAMES, 2);
+    return { prompt: `The ages of ${x} and ${y} are in the ratio ${a}:${b}. After ${n} years the ratio will be ${A / g}:${B / g}. ${x}'s present age?`, ans: a * u, wrong: [b * u, a * u + n, a * (u + 1), A], step: a, why: `${a}x + ${n} : ${b}x + ${n} = ${A / g}:${B / g} → x = ${u}`, p: [a, b, u, n] };
+  } }),
+
+  // ---------------- Number system ----------------
+  Q({ id: 'q.num.unit', sub: 'Number System', lv: [2, 3], time: 20, gen(k) {
+    const base = k.ri(2, 99); const e = k.ri(10, 300); const d = base % 10; if ([0, 1, 5, 6].includes(d) && k.chance(0.7)) return null; let r = 1; for (let i = 0; i < ((e - 1) % 4) + 1 + 4; i++) r = (r * d) % 10; // cyclicity
+    let x = 1; for (let i = 0; i < e; i++) x = (x * d) % 10;
+    const opts = [x, ...k.shuffle([0, 1, 2, 3, 4, 5, 6, 7, 8, 9].filter((v) => v !== x)).slice(0, 3)];
+    return { prompt: 'Unit digit of', emph: `${base}^${e}`, ans: x, opts, why: `last digits of ${d}ⁿ repeat every 4 (or less); ${e} mod 4 = ${e % 4}`, p: [base, e] };
+  } }),
+  Q({ id: 'q.num.rem', sub: 'Remainders', lv: [2, 4], time: 30, gen(k, L) {
+    if (L === 2) { const d = k.ri(6, 19); const q = k.ri(20, 400); const r = k.ri(0, d - 1); const n = d * q + r; return { prompt: `Remainder when ${n} is divided by ${d}?`, ans: r, opts: [r, ...k.shuffle([...Array(d).keys()].filter((v) => v !== r)).slice(0, 3)], why: `${d} × ${q} = ${d * q}; ${n} − ${d * q} = ${r}`, p: [n, d] }; }
+    const b = k.pick([2, 3, 4, 5, 7]); const m = k.pick([5, 7, 9, 11, 13]); if (b % m === 0) return null; const e = k.ri(20, 200); let r = 1; for (let i = 0; i < e; i++) r = (r * b) % m;
+    return { prompt: `Remainder when ${b}^${e} is divided by ${m}?`, ans: r, opts: [r, ...k.shuffle([...Array(m).keys()].filter((v) => v !== r)).slice(0, 3)], why: `powers of ${b} mod ${m} repeat in a cycle; follow it to ${e}`, steps: `Write out ${b}¹, ${b}², ${b}³ … mod ${m} until it returns to 1, then use ${e} mod (cycle length).`, p: [b, e, m] };
+  } }),
+  Q({ id: 'q.num.div', sub: 'Divisibility', lv: [2, 3], time: 20, gen(k) {
+    const d = k.pick([3, 4, 6, 8, 9, 11, 12]); const ok = d * k.ri(1000, 9999); const bad = []; while (bad.length < 3) { const v = k.ri(10000, 99999); if (v % d && !bad.includes(v)) bad.push(v); }
+    return { prompt: `Which number is divisible by ${d}?`, ans: ok, opts: [ok, ...bad], why: { 3: 'digit sum divisible by 3', 4: 'last two digits divisible by 4', 6: 'even and digit sum divisible by 3', 8: 'last three digits divisible by 8', 9: 'digit sum divisible by 9', 11: 'alternating digit sum divisible by 11', 12: 'divisible by both 3 and 4' }[d], p: [d, ok, ...bad] };
+  } }),
+  Q({ id: 'q.num.hcf', sub: 'HCF & LCM', lv: [1, 2], time: 18, gen(k, L) {
+    const g = k.ri(2, 24); let a = k.ri(2, 12), b = k.ri(2, 12); if (k.gcd(a, b) !== 1 || a === b) return null; const A = g * a, B = g * b; const hcf = k.chance(0.5);
+    const ans = hcf ? g : (A * B) / g;
+    return { prompt: `${hcf ? 'HCF' : 'LCM'} of ${A} and ${B}?`, ans, wrong: hcf ? [g * 2, Math.min(a, b), g + 1, A - B > 0 ? A - B : B - A].filter((v) => v !== g) : [A * B, ans / 2, ans + A], step: hcf ? 1 : g, why: `${A} = ${g}×${a}, ${B} = ${g}×${b} → ${hcf ? `HCF ${g}` : `LCM ${g}×${a}×${b} = ${ans}`}`, p: [A, B, hcf] };
+  } }),
+  Q({ id: 'q.num.bells', sub: 'HCF & LCM', lv: [2, 3], time: 25, gen(k) {
+    const xs = k.pickN([4, 6, 8, 9, 10, 12, 15, 16, 18, 20, 24, 30], 3).sort((a, b) => a - b); const L = xs.reduce((a, b) => k.lcm(a, b)); if (L > 360) return null;
+    return { prompt: `Three bells ring every ${xs.join(', ')} minutes. They ring together now. Minutes until they next ring together?`, ans: L, post: ' min', wrong: [xs[0] * xs[1] * xs[2], L / 2, xs[2] * 2, L + xs[0]].filter(Number.isInteger), step: xs[0], why: `LCM(${xs.join(', ')}) = ${L}`, p: xs };
+  } }),
+  Q({ id: 'q.num.factors', sub: 'Factors', lv: [3, 4], deep: true, time: 40, gen(k) {
+    const ps = k.pickN(PRIMES.slice(0, 4), k.pick([2, 3])).sort((a, b) => a - b); const es = ps.map(() => k.ri(1, 4)); const N = ps.reduce((a, p, i) => a * p ** es[i], 1); if (N > 50000) return null; const ans = es.reduce((a, e) => a * (e + 1), 1);
+    return { prompt: `How many factors (divisors) does ${k.fmtIN(N)} have?`, ans, wrong: [es.reduce((a, e) => a + e + 1, 0), ans - 2, ans + 2, es.reduce((a, e) => a * e, 1)].filter((v) => v > 0), step: 2, why: `${ps.map((p, i) => `${p}^${es[i]}`).join(' × ')} → ${es.map((e) => e + 1).join(' × ')} = ${ans}`, steps: 'Write N as a product of prime powers; the number of factors is the product of (each power + 1).', p: [N] };
+  } }),
+  Q({ id: 'q.num.zeros', sub: 'Number System', lv: [3, 3], time: 30, gen(k) {
+    const n = k.ri(25, 600); let z = 0; for (let p = 5; p <= n; p *= 5) z += Math.floor(n / p);
+    return { prompt: `How many zeros are at the end of ${n}! ?`, ans: z, wrong: [Math.floor(n / 5), Math.floor(n / 10), z + 1, z - 1].filter((v) => v !== z && v >= 0), why: `⌊${n}/5⌋ + ⌊${n}/25⌋ + … = ${z}`, steps: 'Each trailing zero needs a 5×2 pair; count the factors of 5.', p: [n] };
+  } }),
+  Q({ id: 'q.num.sumn', sub: 'Sequences & Series', lv: [2, 2], time: 18, gen(k) {
+    const t = k.pick(['nat', 'odd', 'even']); const n = k.ri(10, 60);
+    const ans = t === 'nat' ? (n * (n + 1)) / 2 : t === 'odd' ? n * n : n * (n + 1);
+    return { prompt: `Sum of the first ${n} ${t === 'nat' ? 'natural numbers' : t === 'odd' ? 'odd numbers' : 'even numbers'}?`, ans, wrong: [n * n, (n * (n + 1)) / 2, n * (n + 1), ans + n].filter((v) => v !== ans), step: n, why: t === 'nat' ? `n(n+1)/2 = ${ans}` : t === 'odd' ? `n² = ${ans}` : `n(n+1) = ${ans}`, p: [t, n] };
+  } }),
+
+  // ---------------- Algebra ----------------
+  Q({ id: 'q.alg.lin', sub: 'Linear Equations', lv: [1, 2], time: 15, gen(k, L) {
+    const x = k.ri(-9, 20); const a = k.ri(2, 9); const b = k.ri(-30, 30); const c = a * x + b; if (x === 0) return null;
+    return { prompt: 'Solve for x', emph: `${a}x ${b < 0 ? '−' : '+'} ${Math.abs(b)} = ${c}`, ans: x, wrong: [(c + b) / a, x + 1, -x, x - 1].filter(Number.isInteger), why: `${a}x = ${c - b} → x = ${x}`, p: [a, b, x] };
+  } }),
+  Q({ id: 'q.alg.sys', sub: 'Linear Equations', lv: [2, 3], time: 25, gen(k) {
+    const x = k.ri(2, 30), y = k.ri(1, 25); if (x === y) return null; const t = k.pick(['x', 'xy', 'x2']);
+    const ans = t === 'x' ? x : t === 'xy' ? x * y : x * x - y * y;
+    return { prompt: `x + y = ${x + y} and x − y = ${k.sn(x - y)}. Find ${t === 'x' ? 'x' : t === 'xy' ? 'xy' : 'x² − y²'}.`, ans, wrong: [y, x + y, ans + x, Math.abs(ans - y)].filter((v) => v !== ans), step: Math.max(1, Math.round(ans / 10)), why: `x = ${x}, y = ${y}`, p: [x, y, t] };
+  } }),
+  Q({ id: 'q.alg.quad', sub: 'Quadratic Equations', lv: [2, 4], time: 35, gen(k, L) {
+    const r1 = k.ri(-9, 12), r2 = k.ri(-9, 12); if (r1 === r2 || !r1 || !r2) return null; const S = r1 + r2, P = r1 * r2; const t = L === 2 ? 'big' : k.pick(['sq', 'big', 'sum']);
+    const ans = t === 'big' ? Math.max(r1, r2) : t === 'sum' ? S : r1 * r1 + r2 * r2;
+    const eq = `x² ${S > 0 ? '−' : '+'} ${Math.abs(S)}x ${P < 0 ? '−' : '+'} ${Math.abs(P)} = 0`.replace(' 1x', ' x').replace('+ 0x ', '');
+    return { prompt: t === 'big' ? 'Larger root of' : t === 'sum' ? 'Sum of the roots of' : 'Sum of the squares of the roots of', emph: eq, ans, wrong: t === 'big' ? [Math.min(r1, r2), -Math.max(r1, r2), S].filter((v) => v !== ans) : t === 'sum' ? [-S, P, S + 1] : [S * S, S * S + 2 * P, ans + 2], step: 2, why: `roots ${r1} and ${r2}`, steps: `Find two numbers with sum ${S} and product ${P}: ${r1}, ${r2}.${t === 'sq' ? ` r₁² + r₂² = (sum)² − 2(product) = ${S * S} − ${2 * P} = ${ans}.` : ''}`, p: [r1 < r2 ? r1 : r2, r1 < r2 ? r2 : r1, t] };
+  } }),
+  Q({ id: 'q.alg.ineq', sub: 'Inequalities', lv: [2, 3], time: 22, gen(k) {
+    const a = k.ri(2, 9); const b = k.ri(-20, 20); const c = k.ri(-10, 60); const x = Math.floor((c - b) / a) + 1;
+    return { prompt: 'Smallest integer x such that', emph: `${a}x ${b < 0 ? '−' : '+'} ${Math.abs(b)} > ${c}`, ans: x, wrong: [x - 1, x + 1, Math.ceil((c + b) / a)].filter((v) => v !== x), why: `x > ${((c - b) / a).toFixed(2).replace(/\.00$/, '')} → ${x}`, p: [a, b, c] };
+  } }),
+  Q({ id: 'q.alg.func', sub: 'Functions', lv: [2, 3], time: 25, gen(k, L) {
+    const a = k.ri(1, 5), b = k.ri(-9, 9), c = k.ri(2, 6), d = k.ri(-5, 9); const f = (x) => a * x * x + b; const g = (x) => c * x + d; const v = k.ri(-3, 4);
+    if (L === 2) return { prompt: `f(x) = ${a === 1 ? '' : a}x² ${b < 0 ? '−' : '+'} ${Math.abs(b)}. Find f(${k.sn(v)}).`, ans: f(v), wrong: [a * v * 2 + b, f(v) + 2 * b, f(-v) + 1, a * v + b], step: 3, why: `${a}×${v * v} ${b < 0 ? '−' : '+'} ${Math.abs(b)} = ${f(v)}`, p: [a, b, v] };
+    return { prompt: `f(x) = ${a === 1 ? '' : a}x² ${b < 0 ? '−' : '+'} ${Math.abs(b)} and g(x) = ${c}x ${d < 0 ? '−' : '+'} ${Math.abs(d)}. Find f(g(${k.sn(v)})).`, ans: f(g(v)), wrong: [g(f(v)), f(v) + g(v), f(g(v)) + a], step: 5, why: `g(${v}) = ${g(v)}, f(${g(v)}) = ${f(g(v))}`, p: [a, b, c, d, v] };
+  } }),
+  Q({ id: 'q.log', sub: 'Logarithms', lv: [2, 3], time: 22, gen(k, L) {
+    const SUB = { 2: '₂', 3: '₃', 5: '₅', 10: '₁₀' };
+    const b = k.pick([2, 3, 5, 10]); const e1 = k.ri(1, b === 2 ? 8 : 4);
+    if (L === 2) return { prompt: 'Evaluate', emph: `log${SUB[b]}(${k.fmtIN(b ** e1)})`, ans: e1, wrong: [e1 + 1, e1 - 1, e1 * 2, e1 + 2].filter((v) => v > 0 && v !== e1), why: `${b}^${e1} = ${b ** e1}`, p: [b, e1] };
+    const c = k.pick([2, 3]); const e2 = k.ri(1, 4); const ans = e1 + e2;
+    return { prompt: 'Evaluate', emph: `log${SUB[b]}(${k.fmtIN(b ** e1)}) + log${SUB[c]}(${c ** e2})`, ans, wrong: [e1 * e2, ans + 1, ans - 1], why: `${e1} + ${e2} = ${ans}`, p: [b, e1, c, e2] };
+  } }),
+
+  // ---------------- AP / GP ----------------
+  Q({ id: 'q.ap.nth', sub: 'AP & GP', lv: [1, 2], time: 18, gen(k) {
+    const a = k.ri(-10, 30), d = k.ri(2, 12) * (k.chance(0.2) ? -1 : 1), n = k.ri(8, 60);
+    return { prompt: `${k.ord(n)} term of the AP: ${a}, ${a + d}, ${a + 2 * d}, …?`, ans: a + (n - 1) * d, wrong: [a + n * d, a + (n - 2) * d, n * d], step: Math.abs(d), why: `a + (n−1)d = ${a} + ${n - 1}×${d}`, p: [a, d, n] };
+  } }),
+  Q({ id: 'q.ap.sum', sub: 'AP & GP', lv: [2, 3], time: 30, gen(k) {
+    const a = k.ri(1, 20), d = k.ri(1, 9), n = k.ri(6, 30); const S = (n * (2 * a + (n - 1) * d)) / 2;
+    return { prompt: `Sum of the first ${n} terms of ${a}, ${a + d}, ${a + 2 * d}, …?`, ans: S, wrong: [n * (a + (n - 1) * d), S + a, (n * (2 * a + n * d)) / 2].filter(Number.isInteger), step: n, why: `n/2 × (2a + (n−1)d) = ${S}`, p: [a, d, n] };
+  } }),
+  Q({ id: 'q.gp', sub: 'AP & GP', lv: [2, 3], time: 22, gen(k) {
+    const a = k.ri(1, 6), r = k.pick([2, 3]), n = k.ri(5, r === 2 ? 11 : 7);
+    return { prompt: `${k.ord(n)} term of the GP: ${a}, ${a * r}, ${a * r * r}, …?`, ans: a * r ** (n - 1), wrong: [a * r ** n, a * r ** (n - 2), a * r * (n - 1)], step: a, why: `a × r^(n−1) = ${a} × ${r}^${n - 1}`, p: [a, r, n] };
+  } }),
+
+  // ---------------- Geometry & mensuration ----------------
+  Q({ id: 'q.geo.ang', sub: 'Geometry', lv: [1, 2], time: 15, gen(k, L) {
+    if (L === 2 && k.chance(0.5)) { const n = k.pick([5, 6, 8, 9, 10, 12]); const each = 180 - 360 / n; const name = { 5: 'pentagon', 6: 'hexagon', 8: 'octagon', 9: 'nonagon', 10: 'decagon', 12: 'dodecagon' }[n]; return { prompt: `Each interior angle of a regular ${name}?`, ans: each, post: '°', wrong: [360 / n, (n - 2) * 180, each - 10, each + 15], step: 10, why: `180 − 360/${n} = ${each}°`, p: ['poly', n] }; }
+    const a = k.ri(25, 100), b = k.ri(20, 150 - a); return { prompt: `Two angles of a triangle are ${a}° and ${b}°. The third angle?`, ans: 180 - a - b, post: '°', wrong: [360 - a - b, 90 - Math.abs(a - b) > 0 ? 90 - Math.abs(a - b) : 45, 180 - a - b + 10], step: 5, why: `180 − ${a} − ${b}`, p: ['tri', a, b] };
+  } }),
+  Q({ id: 'q.geo.pyth', sub: 'Geometry', lv: [1, 3], time: 18, gen(k) {
+    const [a, b, c] = k.pick(TRIPLES); const m = k.pick([1, 1, 2, 3]); const askHyp = k.chance(0.6);
+    if (askHyp) return { prompt: `A right triangle has legs ${a * m} and ${b * m}. Hypotenuse?`, ans: c * m, wrong: [(a + b) * m, c * m + 1, c * m - 2], step: m, why: `√(${(a * m) ** 2} + ${(b * m) ** 2}) = ${c * m}`, p: [a, b, m, 1] };
+    return { prompt: `A ${c * m} m ladder leans on a wall with its foot ${a * m} m from the wall. How high does it reach?`, ans: b * m, post: ' m', wrong: [c * m - a * m, b * m + 1, c * m], step: m, why: `√(${(c * m) ** 2} − ${(a * m) ** 2}) = ${b * m}`, p: [a, b, m, 0] };
+  } }),
+  Q({ id: 'q.mens.rect', sub: 'Mensuration', lv: [1, 2], time: 18, gen(k, L) {
+    const l = k.ri(4, 40), w = k.ri(3, l); if (L === 1) { const area = k.chance(0.5); return { prompt: `A rectangle is ${l} m by ${w} m. ${area ? 'Area' : 'Perimeter'}?`, ans: area ? l * w : 2 * (l + w), post: area ? ' m²' : ' m', wrong: area ? [2 * (l + w), l * w + l, (l + w) * 2 + 4] : [l * w, l + w, 2 * l + w], step: 2, why: area ? `${l} × ${w}` : `2 × (${l} + ${w})`, p: [l, w, area] }; }
+    return { prompt: `A rectangle has perimeter ${2 * (l + w)} m and length ${l} m. Its area?`, ans: l * w, post: ' m²', wrong: [(l + w) * l, l * (2 * (l + w) - l), l * w + w], step: l, why: `width = ${l + w} − ${l} = ${w}; area ${l * w}`, p: [l, w] };
+  } }),
+  Q({ id: 'q.mens.circle', sub: 'Mensuration', lv: [2, 3], time: 22, gen(k) {
+    const r = 7 * k.ri(1, 6); const area = k.chance(0.5); const ans = area ? (22 / 7) * r * r : 2 * (22 / 7) * r;
+    return { prompt: `A circle has radius ${r} cm. Its ${area ? 'area' : 'circumference'}? (π = 22/7)`, ans, post: area ? ' cm²' : ' cm', wrong: area ? [2 * (22 / 7) * r, (22 / 7) * r * r * 2, ans + 22] : [(22 / 7) * r * r, (22 / 7) * r, ans + 22], step: 22, why: area ? `22/7 × ${r}² = ${ans}` : `2 × 22/7 × ${r} = ${ans}`, p: [r, area] };
+  } }),
+  Q({ id: 'q.mens.solid', sub: 'Mensuration', lv: [2, 3], time: 28, gen(k, L) {
+    const t = k.pick(L === 2 ? ['cubeV', 'cuboidV', 'cubeS'] : ['cuboidS', 'cylV', 'cubeS']);
+    if (t === 'cubeV') { const a = k.ri(3, 15); return { prompt: `Volume of a cube with side ${a} cm?`, ans: a ** 3, post: ' cm³', wrong: [6 * a * a, a * a, a ** 3 + a], step: a, why: `${a}³`, p: [t, a] }; }
+    if (t === 'cubeS') { const a = k.ri(3, 20); return { prompt: `Total surface area of a cube with side ${a} cm?`, ans: 6 * a * a, post: ' cm²', wrong: [4 * a * a, a ** 3, 6 * a], step: a, why: `6 × ${a}²`, p: [t, a] }; }
+    const l = k.ri(4, 20), b = k.ri(3, 15), h = k.ri(2, 12);
+    if (t === 'cuboidV') return { prompt: `Volume of a ${l} × ${b} × ${h} cm box?`, ans: l * b * h, post: ' cm³', wrong: [2 * (l * b + b * h + h * l), l * b + h, l * b * h + l], step: l, why: `${l}×${b}×${h}`, p: [t, l, b, h] };
+    if (t === 'cuboidS') return { prompt: `Total surface area of a ${l} × ${b} × ${h} cm box?`, ans: 2 * (l * b + b * h + h * l), post: ' cm²', wrong: [l * b * h, l * b + b * h + h * l, 2 * (l * b + b * h)], step: 2 * l, why: `2(lb + bh + hl)`, p: [t, l, b, h] };
+    const r = 7 * k.ri(1, 3); return { prompt: `Volume of a cylinder with radius ${r} cm and height ${h} cm? (π = 22/7)`, ans: (22 / 7) * r * r * h, post: ' cm³', wrong: [2 * (22 / 7) * r * h, (22 / 7) * r * h * 2 * r + 22, (22 / 7) * r * r], step: 22 * h, why: `πr²h = 22/7 × ${r * r} × ${h}`, p: [t, r, h] };
+  } }),
+  Q({ id: 'q.coord', sub: 'Coordinate Geometry', lv: [2, 3], time: 25, gen(k, L) {
+    const x1 = k.ri(-6, 6), y1 = k.ri(-6, 6); const t = L === 2 ? k.pick(['mid', 'dist']) : k.pick(['dist', 'slope']);
+    if (t === 'dist') { const [a, b, c] = k.pick(TRIPLES.slice(0, 6)); const x2 = x1 + (k.chance(0.5) ? a : -a), y2 = y1 + (k.chance(0.5) ? b : -b); return { prompt: `Distance between (${x1}, ${y1}) and (${x2}, ${y2})?`, ans: c, wrong: [a + b, c + 1, Math.abs(x2 + y2 - x1 - y1) || c + 2], why: `√(${a}² + ${b}²) = ${c}`, p: [t, x1, y1, x2, y2] }; }
+    if (t === 'mid') { const x2 = x1 + 2 * k.ri(1, 6), y2 = y1 + 2 * k.ri(-5, 5); const ans = `(${(x1 + x2) / 2}, ${(y1 + y2) / 2})`; return { prompt: `Midpoint of (${x1}, ${y1}) and (${x2}, ${y2})?`, ans, wrong: [`(${x2 - x1}, ${y2 - y1})`, `(${(x1 + x2) / 2}, ${(y1 - y2) / 2})`, `(${x1 + x2}, ${y1 + y2})`, `(${(y1 + y2) / 2}, ${(x1 + x2) / 2})`, `(${(x1 + x2) / 2 + 1}, ${(y1 + y2) / 2})`, `(${(x1 + x2) / 2}, ${(y1 + y2) / 2 - 1})`].filter((v) => v !== ans), why: 'average the x’s and the y’s', p: [t, x1, y1, x2, y2] }; }
+    const dx = k.ri(1, 6), m = k.ri(-4, 4); if (!m) return null; const x2 = x1 + dx, y2 = y1 + m * dx; return { prompt: `Slope of the line through (${k.sn(x1)}, ${k.sn(y1)}) and (${k.sn(x2)}, ${k.sn(y2)})?`, ans: m, wrong: [-m, m + 1, dx, 1 / m].filter(Number.isInteger), why: `rise ${k.sn(y2 - y1)} ÷ run ${dx} = ${k.sn(m)}`, p: [t, x1, y1, dx, m] };
+  } }),
+
+  // ---------------- P&C, probability, sets, stats ----------------
+  Q({ id: 'q.pnc.arr', sub: 'Permutations & Combinations', lv: [2, 3], time: 25, gen(k, L) {
+    const words = L === 2 ? ['MANGO', 'TIGER', 'PLANT', 'CHAIR', 'BRICK', 'NIGHT', 'STORM', 'CRANE', 'DELHI', 'QUEST'] : ['APPLE', 'BANANA', 'LETTER', 'COFFEE', 'PEPPER', 'TATTOO', 'BALLOON', 'SUCCESS', 'GOOGLE', 'COOKIE', 'KITTEN', 'RABBIT'];
+    const w = k.pick(words); const cnt = {}; [...w].forEach((c) => { cnt[c] = (cnt[c] || 0) + 1; }); const ans = Object.values(cnt).reduce((a, v) => a / k.fact(v), k.fact(w.length));
+    return { prompt: `In how many ways can the letters of ${w} be arranged?`, ans, wrong: [k.fact(w.length), ans * 2, ans / 2, k.fact(w.length - 1)].filter((v) => Number.isInteger(v) && v !== ans), step: 10, why: `${w.length}!${Object.values(cnt).filter((v) => v > 1).map((v) => ` ÷ ${v}!`).join('')} = ${k.fmtIN(ans)}`, p: [w] };
+  } }),
+  Q({ id: 'q.pnc.comm', sub: 'Permutations & Combinations', lv: [2, 4], time: 35, deep: true, gen(k, L) {
+    if (L === 2) { const n = k.ri(5, 12), r = k.ri(2, 4); return { prompt: `In how many ways can ${r} people be chosen from ${n}?`, ans: k.nCr(n, r), wrong: [k.nCr(n, r) * k.fact(r), n * r, k.nCr(n, r - 1)].filter((v) => v !== k.nCr(n, r)), step: 5, why: `${n}C${r} = ${k.nCr(n, r)}`, p: [n, r] }; }
+    const m = k.ri(4, 8), w = k.ri(3, 7), a = k.ri(1, 3), b = k.ri(1, 3); const ans = k.nCr(m, a) * k.nCr(w, b);
+    return { prompt: `A committee of ${a} men and ${b} women is formed from ${m} men and ${w} women. How many ways?`, ans, wrong: [k.nCr(m + w, a + b), k.nCr(m, a) + k.nCr(w, b), ans * 2], step: 10, why: `${m}C${a} × ${w}C${b} = ${k.nCr(m, a)} × ${k.nCr(w, b)}`, steps: 'Choose men and women independently, then multiply (AND → ×).', p: [m, w, a, b] };
+  } }),
+  Q({ id: 'q.prob.dice', sub: 'Probability', lv: [2, 3], time: 30, gen(k) {
+    const t = k.pick(['sum', 'sumgt', 'double']); let fav = 0; let s = k.ri(3, 11);
+    for (let i = 1; i <= 6; i++) for (let j = 1; j <= 6; j++) { if (t === 'sum' && i + j === s) fav++; if (t === 'sumgt' && i + j > s) fav++; if (t === 'double' && i === j) fav++; }
+    const ans = k.frac(fav, 36); const wrongs = [k.frac(fav, 12), k.frac(Math.max(1, fav - 1), 36), k.frac(fav + 1, 36), k.frac(36 - fav, 36), k.frac(fav, 6)].filter((v) => v !== ans);
+    return { prompt: t === 'double' ? 'Two dice are rolled. Probability of a double?' : `Two dice are rolled. Probability the sum is ${t === 'sum' ? `exactly ${s}` : `greater than ${s}`}?`, ans, wrong: wrongs, why: `${fav} favourable out of 36 = ${ans}`, p: [t, t === 'double' ? 0 : s] };
+  } }),
+  Q({ id: 'q.prob.balls', sub: 'Probability', lv: [3, 4], deep: true, time: 45, gen(k) {
+    const r = k.ri(2, 7), b = k.ri(2, 7), g = k.ri(0, 4); const n = r + b + g; const t = k.pick(['both', 'diff']); const cols = g ? `${r} red, ${b} blue and ${g} green` : `${r} red and ${b} blue`;
+    const fav = t === 'both' ? k.nCr(r, 2) : r * b; const ans = k.frac(fav, k.nCr(n, 2));
+    return { prompt: `A bag has ${cols} balls. Two are drawn at random. Probability that ${t === 'both' ? 'both are red' : 'one is red and one is blue'}?`, ans, wrong: [k.frac(r * r, n * n), k.frac(r, n), k.frac(fav, n * (n - 1)), k.frac(fav + 1, k.nCr(n, 2))].filter((v) => v !== ans), why: `${fav} ÷ ${n}C2 (${k.nCr(n, 2)}) = ${ans}`, steps: `Total pairs = ${n}C2 = ${k.nCr(n, 2)}. Favourable = ${t === 'both' ? `${r}C2 = ${fav}` : `${r} × ${b} = ${fav}`}.`, p: [r, b, g, t] };
+  } }),
+  Q({ id: 'q.prob.coins', sub: 'Probability', lv: [2, 3], time: 25, gen(k) {
+    const n = k.pick([2, 3, 4]); const atl = k.ri(1, n); let fav = 0; for (let x = atl; x <= n; x++) fav += k.nCr(n, x); const tot = 2 ** n; const ans = k.frac(fav, tot);
+    return { prompt: `${n} coins are tossed. Probability of at least ${atl} head${atl > 1 ? 's' : ''}?`, ans, wrong: [k.frac(k.nCr(n, atl), tot), k.frac(tot - fav || 1, tot), k.frac(atl, n), k.frac(fav, tot * 2)].filter((v) => v !== ans), why: `${fav} of ${tot} outcomes`, p: [n, atl] };
+  } }),
+  Q({ id: 'q.sets', sub: 'Set Theory', lv: [2, 3], time: 30, gen(k) {
+    const both = k.ri(3, 30), onlyA = k.ri(5, 40), onlyB = k.ri(5, 40), none = k.ri(0, 25); const tot = both + onlyA + onlyB + none; const [A, B] = k.pick([['tea', 'coffee'], ['cricket', 'football'], ['Hindi', 'English'], ['Instagram', 'YouTube']]);
+    const t = k.pick(['onlyA', 'none', 'either']); const ans = t === 'onlyA' ? onlyA : t === 'none' ? none : onlyA + onlyB + both; if (t === 'none' && !none) return null;
+    const given = t === 'none' ? `${onlyA + both} like ${A}, ${onlyB + both} like ${B} and ${both} like both` : `${onlyA + both} like ${A}, ${onlyB + both} like ${B} and ${both} like both`;
+    return { prompt: `Of ${tot} people, ${given}. How many like ${t === 'onlyA' ? `only ${A}` : t === 'none' ? 'neither' : `${A} or ${B}`}?`, ans, wrong: [onlyA + both, tot - onlyA - onlyB, onlyA + onlyB + 2 * both, ans + both].filter((v) => v !== ans && v >= 0), step: 2, why: t === 'onlyA' ? `${onlyA + both} − ${both} = ${onlyA}` : t === 'none' ? `${tot} − (${onlyA + both} + ${onlyB + both} − ${both}) = ${none}` : `${onlyA + both} + ${onlyB + both} − ${both} = ${onlyA + onlyB + both}`, p: [onlyA, onlyB, both, none, t] };
+  } }),
+  Q({ id: 'q.stats', sub: 'Basic Statistics', lv: [1, 2], time: 18, gen(k, L) {
+    const n = L === 1 ? 5 : 6; const xs = Array.from({ length: n }, () => k.ri(1, 40)); const sorted = [...xs].sort((a, b) => a - b); const t = k.pick(['median', 'range', 'mode']);
+    if (t === 'mode') { const m = xs[0]; xs[2] = m; xs[4] = m; if (new Set(xs).size < n - 2) return null; const s2 = [...xs].sort((a, b) => a - b); return { prompt: 'Mode of', emph: xs.join(', '), ans: m, opts: [m, ...k.shuffle([...new Set(xs)].filter((v) => v !== m)).slice(0, 3)], why: `${m} appears most often`, p: [t, ...xs], _: s2 }; }
+    if (t === 'range') return { prompt: 'Range of', emph: xs.join(', '), ans: sorted[n - 1] - sorted[0], wrong: [sorted[n - 1], sorted[n - 1] + sorted[0], sorted[n - 2] - sorted[0]], why: `${sorted[n - 1]} − ${sorted[0]}`, p: [t, ...xs] };
+    const med = n % 2 ? sorted[(n - 1) / 2] : (sorted[n / 2 - 1] + sorted[n / 2]) / 2; return { prompt: 'Median of', emph: xs.join(', '), ans: med, wrong: [xs[(n - 1) >> 1], Math.round(xs.reduce((a, b) => a + b, 0) / n), sorted[n >> 1] + 1], why: `sorted: ${sorted.join(', ')}`, p: [t, ...xs] };
+  } }),
+];
