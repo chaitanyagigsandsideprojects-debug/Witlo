@@ -26,7 +26,15 @@ def grab(name=None):
     return img
 
 def words(img):
-    buf = io.BytesIO(); img.convert("L").save(buf, "PNG")
+    from PIL import ImageOps
+    g = img.convert("L")
+    rows = []
+    for variant in (g, ImageOps.invert(g)):
+        rows += _ocr(variant)
+    return rows
+
+def _ocr(g):
+    buf = io.BytesIO(); g.save(buf, "PNG")
     out = subprocess.run(["tesseract", "stdin", "stdout", "--psm", "11", "tsv"], input=buf.getvalue(), capture_output=True).stdout.decode("utf8", "ignore")
     rows = []
     for r in csv.DictReader(io.StringIO(out), delimiter="\t", quoting=csv.QUOTE_NONE):
@@ -38,7 +46,7 @@ def words(img):
 def find(word, img=None):
     """Exact, case-sensitive word match; the lowest match on screen wins (buttons sit below body text)."""
     img = img or grab()
-    hits = [(tp, l + w // 2, tp + h // 2) for t, l, tp, w, h in words(img) if t.strip(".,:!?'\"") == word]
+    hits = [(tp, l + w // 2, tp + h // 2) for t, l, tp, w, h in words(img) if t.replace("\u2019", "'").strip(".,:!?'\"") == word]
     if not hits:
         return None
     hits.sort()
@@ -82,7 +90,7 @@ def main():
         tap_xy(p[0] + int(W * 0.2), p[1] + int(H * 0.045)); time.sleep(1)
     sh("input", "text", "tester_77"); time.sleep(1); sh("input", "keyevent", "111"); time.sleep(1)
     step("name-typed")
-    tap("Let's", name="after-letsplay", scroll=True, wait=20); step("home")
+    tap("play", name="after-letsplay", scroll=True, wait=20); step("home")
     time.sleep(2)
     tap("BLITZ", wait=15); step("matchmaking")
     time.sleep(5); step("game-start")
