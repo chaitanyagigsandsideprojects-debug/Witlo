@@ -72,7 +72,9 @@ def step(name):
 def main():
     step("launch")
     tap("older"); grab("ticked"); tap("Agree"); step("terms-done")
-    tap("USERNAME", required=False)
+    p = find("USERNAME")
+    if p:
+        tap_xy(p[0] + int(W * 0.2), p[1] + int(H * 0.045)); time.sleep(1)
     sh("input", "text", "tester_77"); time.sleep(1); sh("input", "keyevent", "111"); time.sleep(1)
     step("name-typed")
     tap("Let's", name="after-letsplay"); step("home")
