@@ -47,9 +47,14 @@ def find(word, img=None):
 def tap_xy(x, y):
     sh("input", "tap", str(x), str(y))
 
-def tap(word, wait=10, required=True, name=None):
-    end = time.time() + wait
+def swipe_up():
+    sh("input", "swipe", str(W // 2), str(int(H * 0.75)), str(W // 2), str(int(H * 0.3)), "350"); time.sleep(1.2)
+
+def tap(word, wait=10, required=True, name=None, scroll=False):
+    end = time.time() + wait; tries = 0
     while time.time() < end:
+        if scroll and tries: swipe_up()
+        tries += 1
         p = find(word)
         if p:
             tap_xy(*p); print(f"tapped {word!r} at {p}"); time.sleep(1.5)
@@ -77,7 +82,7 @@ def main():
         tap_xy(p[0] + int(W * 0.2), p[1] + int(H * 0.045)); time.sleep(1)
     sh("input", "text", "tester_77"); time.sleep(1); sh("input", "keyevent", "111"); time.sleep(1)
     step("name-typed")
-    tap("Let's", name="after-letsplay"); step("home")
+    tap("Let's", name="after-letsplay", scroll=True, wait=20); step("home")
     time.sleep(2)
     tap("BLITZ", wait=15); step("matchmaking")
     time.sleep(5); step("game-start")
@@ -94,7 +99,7 @@ def main():
     step("result")
     tap("Home", wait=12, required=False); time.sleep(6); step("after-home")
     sh("input", "keyevent", "4"); time.sleep(2); step("after-back")
-    for t in ("Train", "Leaders", "Profile"):
+    for t in ("Train", "Leaders", "Profile", "Home"):
         tap(t, required=False); step(f"tab-{t}")
     print("::notice title=UI test::Full flow finished without a crash")
 
