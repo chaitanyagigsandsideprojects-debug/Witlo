@@ -36,11 +36,13 @@ def words(img):
     return rows
 
 def find(word, img=None):
+    """Exact, case-sensitive word match; the lowest match on screen wins (buttons sit below body text)."""
     img = img or grab()
-    for t, l, tp, w, h in words(img):
-        if word.lower() in t.lower():
-            return l + w // 2, tp + h // 2
-    return None
+    hits = [(tp, l + w // 2, tp + h // 2) for t, l, tp, w, h in words(img) if t.strip(".,:!?'\"") == word]
+    if not hits:
+        return None
+    hits.sort()
+    return hits[-1][1], hits[-1][2]
 
 def tap_xy(x, y):
     sh("input", "tap", str(x), str(y))
@@ -69,13 +71,13 @@ def step(name):
 
 def main():
     step("launch")
-    tap("older"); tap("Agree"); step("terms-done")
-    tap("chai_lover", required=False)
+    tap("older"); grab("ticked"); tap("Agree"); step("terms-done")
+    tap("USERNAME", required=False)
     sh("input", "text", "tester_77"); time.sleep(1); sh("input", "keyevent", "111"); time.sleep(1)
     step("name-typed")
-    tap("play", name="after-letsplay"); step("home")
+    tap("Let's", name="after-letsplay"); step("home")
     time.sleep(2)
-    tap("BLITZ"); step("matchmaking")
+    tap("BLITZ", wait=15); step("matchmaking")
     time.sleep(5); step("game-start")
     t0 = time.time(); taps = 0
     pts = [(0.28, 0.66), (0.72, 0.66), (0.28, 0.78), (0.72, 0.78), (0.5, 0.86), (0.5, 0.72)]
