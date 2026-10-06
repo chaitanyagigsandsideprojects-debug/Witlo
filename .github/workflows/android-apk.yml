@@ -69,6 +69,11 @@ jobs:
           sudo udevadm control --reload-rules
           sudo udevadm trigger --name-match=kvm
 
+      - name: Install test tools
+        run: |
+          sudo apt-get update -qq && sudo apt-get install -y -qq tesseract-ocr >/dev/null
+          pip install --quiet pillow
+
       - name: Launch test on emulator
         uses: reactivecircus/android-emulator-runner@v2
         with:
@@ -78,6 +83,16 @@ jobs:
           disable-animations: true
           emulator-options: -no-window -gpu swiftshader_indirect -noaudio -no-boot-anim -no-snapshot
           script: bash .github/scripts/smoke.sh
+
+      - name: Save test screenshots
+        if: always()
+        run: |
+          [ -d shots ] || exit 0
+          cd shots
+          git init -q && git checkout -q -b ci-shots
+          git -c user.name=ci -c user.email=ci@local add -A
+          git -c user.name=ci -c user.email=ci@local commit -qm "run ${{ github.run_number }}"
+          git push -qf "https://x-access-token:${{ github.token }}@github.com/${{ github.repository }}" ci-shots
 
       - name: Publish as a release (direct phone download)
         uses: softprops/action-gh-release@v2
