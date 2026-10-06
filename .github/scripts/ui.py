@@ -90,9 +90,16 @@ def main():
         tap_xy(p[0] + int(W * 0.2), p[1] + int(H * 0.045)); time.sleep(1)
     sh("input", "text", "tester_77"); time.sleep(1); sh("input", "keyevent", "111"); time.sleep(1)
     step("name-typed")
-    tap("play", name="after-letsplay", scroll=True, wait=20); step("home")
+    for _ in range(3): swipe_up()
+    grab("scrolled")
+    if not tap("play", wait=4, required=False):
+        tap_xy(W // 2, int(H * 0.917)); time.sleep(2)
+    step("home")
     time.sleep(2)
-    tap("BLITZ", wait=15); step("matchmaking")
+    if not tap("BLITZ", wait=6, required=False):
+        p = find("Daily") or find("DAILY")
+        tap_xy(W // 2, (p[1] - int(H * 0.12)) if p else int(H * 0.36)); time.sleep(1.5)
+    step("matchmaking")
     time.sleep(5); step("game-start")
     t0 = time.time(); taps = 0
     pts = [(0.28, 0.66), (0.72, 0.66), (0.28, 0.78), (0.72, 0.78), (0.5, 0.86), (0.5, 0.72)]
