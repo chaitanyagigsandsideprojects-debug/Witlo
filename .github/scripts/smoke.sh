@@ -4,7 +4,8 @@ APK=$(ls Witlo-test-*.apk | head -1)
 adb install -r "$APK" || { echo "::error title=Install failed::adb install failed"; exit 1; }
 adb logcat -c
 adb shell monkey -p com.loganapps.witlo -c android.intent.category.LAUNCHER 1
-sleep 40
+sleep 25
+python3 .github/scripts/ui.py; UI=$?
 adb logcat -d > logcat.txt
 adb exec-out screencap -p > screen.png || true
 PID=$(adb shell pidof com.loganapps.witlo | tr -d '\r')
@@ -17,4 +18,5 @@ if [ -z "$PID" ]; then
   echo "::error title=Log tail::$(enc "$(cat tailerr.txt)")"
   exit 1
 fi
-echo "::notice title=Smoke test::App is running (pid $PID) after 40s"
+echo "::notice title=Smoke test::App is running (pid $PID)"
+exit $UI
