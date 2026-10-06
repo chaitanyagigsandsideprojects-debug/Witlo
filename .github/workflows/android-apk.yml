@@ -71,8 +71,7 @@ jobs:
 
       - name: Install test tools
         run: |
-          sudo apt-get update -qq && sudo apt-get install -y -qq tesseract-ocr >/dev/null
-          pip install --quiet pillow
+          sudo apt-get update -qq && sudo apt-get install -y -qq tesseract-ocr python3-pil >/dev/null
 
       - name: Launch test on emulator
         uses: reactivecircus/android-emulator-runner@v2
