@@ -520,7 +520,7 @@ export default [
       ['A family has two children. The older one is a boy. Probability both are boys?', '1/2', ['1/3', '1/4', '2/3'], 'Only the younger child is unknown: boy or girl, 1/2'],
       ['A family has two children and at least one is a boy. Probability both are boys?', '1/3', ['1/2', '1/4', '2/3'], 'Possible families: BB, BG, GB (GG is ruled out). Only 1 of these 3 is BB'],
       ['Two dice are rolled. Which total is most likely?', '7', ['12', '6', 'All totals are equally likely'], '7 can be made 6 ways (1+6, 2+5, 3+4 and reversed): more than any other total'],
-      ['A die is rolled twice. Probability of at least one six?', '11/36', ['1/3', '1/6', '1/36'], 'Use 1 − P(no six) = 1 − (5/6)² = 1 − 25/36 = 11/36. Adding 1/6 + 1/6 counts double six twice'],
+      ['A dice is rolled twice. Probability of at least one six?', '11/36', ['1/3', '1/6', '1/36'], 'Use 1 − P(no six) = 1 − (5/6)² = 1 − 25/36 = 11/36. Adding 1/6 + 1/6 counts double six twice'],
       ['You pick 1 of 3 boxes; one hides a prize. The host opens an empty box you didn\'t pick and offers a switch. Chance of winning if you switch?', '2/3', ['1/2', '1/3', 'It makes no difference'], 'Your first pick is right only 1/3 of the time; switching wins the other 2/3'],
       ['In a group of 23 people, roughly what is the chance that two share a birthday?', 'About 50%', ['About 6%', 'About 23%', 'Almost 0%'], 'There are 253 possible pairs among 23 people, so a shared birthday is surprisingly likely: about 50%'],
       ['Three coins are tossed. Probability of getting exactly 2 heads?', '3/8', ['2/3', '1/2', '1/4'], 'HHT, HTH, THH: 3 of the 8 equally likely outcomes'],

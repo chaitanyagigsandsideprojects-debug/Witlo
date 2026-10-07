@@ -3,7 +3,7 @@
    are drawn from bundled Fluent 3D artwork. On iPhone, ui/emoji.ios.js is used instead
    and Apple's own emoji are shown. */
 import React, { memo } from 'react';
-import { Text as RNText, StyleSheet, Image } from 'react-native';
+import { Text as RNText, StyleSheet, Image, View, Platform } from 'react-native';
 import { EMOJI_IMG } from './emoji-assets';
 
 const MAP = {};
@@ -29,11 +29,26 @@ function split(str) {
   cache.set(str, out); return out;
 }
 
+// An image inside a line of text sits on the text's baseline, so it looks raised next to the letters.
+// Wrapping it in a small box lets us nudge it down so its centre lines up with the text's centre.
+const NUDGE = Platform.OS === 'android' ? 0.2 : 0.1;
+const InlineEmoji = memo(function InlineEmoji({ ch, size }) {
+  return (
+    <View style={{ width: size, height: size, transform: [{ translateY: Math.round(size * NUDGE) }] }}>
+      <Emoji ch={ch} size={size} />
+    </View>
+  );
+});
+
 function renderChildren(children, size) {
+  // a Text that holds only an emoji (icons in rows) is already centred by its row: no nudge
+  const flat = React.Children.toArray(children).filter((c) => typeof c === 'string' || typeof c === 'number').join('').trim();
+  const fp = flat ? split(flat) : null;
+  const alone = !!fp && fp.length === 1 && typeof fp[0] !== 'string' && React.Children.toArray(children).every((c) => typeof c === 'string' || typeof c === 'number');
   return React.Children.map(children, (c, idx) => {
     if (typeof c !== 'string') return c;
     const parts = split(c); if (!parts) return c;
-    return parts.map((p, i) => (typeof p === 'string' ? p : <Emoji key={`e${idx}-${i}`} ch={p.e} size={size} />));
+    return parts.map((p, i) => (typeof p === 'string' ? p : alone ? <Emoji key={`e${idx}-${i}`} ch={p.e} size={size} /> : <InlineEmoji key={`e${idx}-${i}`} ch={p.e} size={size} />));
   });
 }
 

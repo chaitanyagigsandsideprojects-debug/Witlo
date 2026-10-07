@@ -35,6 +35,9 @@ const BRAND_YELLOW = '#FED602';
 const GRAD = ['#FF9A4A', '#FF5E62'];
 const GRAD_DEEP = ['#4B3AA8', '#2A2063'];
 const EASE = Easing.bezier(0.22, 1, 0.36, 1); // smooth "ease-out-quint"
+// Android: some phones stop drawing the contents of shadowed views while a parent fades in
+// (blank buttons). On Android, pages and questions slide in without fading.
+const FADE = Platform.OS !== 'android';
 const Glow = ({ colors = GRAD }) => <LinearGradient pointerEvents="none" colors={colors} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={StyleSheet.absoluteFill} />;
 
 const RIVALS = [
@@ -200,7 +203,7 @@ function Clock({ gRef, onTimeUp, s, C }) {
 }
 
 /* ---------------- Smooth entrance for sheets and dialogs ---------------- */
-function Appear({ children, style, from = 28, fade = true }) {
+function Appear({ children, style, from = 28, fade = FADE }) {
   const a = useRef(new Animated.Value(0)).current;
   useEffect(() => { Animated.timing(a, { toValue: 1, duration: 280, easing: EASE, useNativeDriver: true }).start(); }, [a]);
   return <Animated.View style={[style, { opacity: fade ? a : 1, transform: [{ translateY: a.interpolate({ inputRange: [0, 1], outputRange: [from, 0] }) }] }]}>{children}</Animated.View>;
@@ -209,7 +212,14 @@ function Backdrop({ children, style, onPress }) {
   const a = useRef(new Animated.Value(0)).current;
   useEffect(() => { Animated.timing(a, { toValue: 1, duration: 220, easing: EASE, useNativeDriver: true }).start(); }, [a]);
   const Wrap = onPress ? Pressable : View;
-  return <Animated.View style={[StyleSheet.absoluteFill, { opacity: a }]}><Wrap style={[StyleSheet.absoluteFill, style]} onPress={onPress} accessibilityRole={onPress ? 'button' : undefined} accessibilityLabel={onPress ? 'Close' : undefined}>{children}</Wrap></Animated.View>;
+  // only the dim layer fades; the sheet above it never sits inside a fading view (see FADE)
+  const { backgroundColor, ...rest } = StyleSheet.flatten(style) || {};
+  return (
+    <View style={StyleSheet.absoluteFill} pointerEvents="box-none">
+      <Animated.View pointerEvents="none" style={[StyleSheet.absoluteFill, { backgroundColor, opacity: a }]} />
+      <Wrap style={[StyleSheet.absoluteFill, rest]} onPress={onPress} accessibilityRole={onPress ? 'button' : undefined} accessibilityLabel={onPress ? 'Close' : undefined}>{children}</Wrap>
+    </View>
+  );
 }
 
 /* ---------------- 3 · 2 · 1 · GO! pop ---------------- */
@@ -805,14 +815,14 @@ function App() {
     const cats = Object.entries(g.catStats).map(([k, v]) => ({ cat: k, ...v }));
     const metrics = sessionMetrics(g.log); if (metrics) H.logSession({ ...metrics, kind: g.kind, day: today });
     const growth = [];
-    cats.forEach(({ cat }) => { const b = g.skill0[cat]; const a = H.cats[cat] && H.cats[cat].a >= 3 ? Math.round(H.skill(cat) / 10) : null; if (a != null && b != null && a !== b) growth.push(`${CATS[cat].icon} ${CATS[cat].name} skill ${b} → ${a}`); });
+    cats.forEach(({ cat }) => { const b = g.skill0[cat]; const a = H.cats[cat] && H.cats[cat].a >= 3 ? Math.round(H.skill(cat) / 10) : null; if (a != null && b != null && a > b) growth.push(`${CATS[cat].icon} ${CATS[cat].name} skill ${b} → ${a}`); });
     g.discovered.slice(0, 3).forEach((c) => growth.push(`✨ New concept: ${c}`));
     g.masteredNow.slice(0, 2).forEach((c) => growth.push(`🏅 Mastered: ${c}`));
     if (metrics && metrics.n >= 6) growth.push(`🧠 ${metrics.skills} kinds of thinking · ${metrics.concepts} concepts this game`);
     // Wit's verdict
     let title; let wit; let mood = 'happy';
     if (g.kind === 'blitz') {
-      title = forfeit ? 'You left the duel' : out === 1 ? 'Victory!' : out === 0.5 ? 'Dead heat!' : 'So close!';
+      title = forfeit ? 'You left the duel' : out === 1 ? 'Victory!' : out === 0.5 ? "It's a tie!" : 'So close!';
       wit = forfeit ? 'Everyone needs a break. Come back stronger!' : out === 1 ? pick(WIT.win) : out === 0.5 ? 'Perfectly matched. Rematch?' : pick(WIT.lose);
       mood = out === 1 ? 'party' : out === 0.5 ? 'wow' : 'lose';
     } else if (g.kind === 'daily') {
@@ -1143,7 +1153,7 @@ function App() {
         {match.phase === 'ask' || match.phase === 'declined' ? (
           <>
             <Text style={s.label}>REMATCH</Text>
-            <WitArt mood={match.phase === 'declined' ? 'lose' : 'loading'} size={200} />
+            <WitArt mood={match.phase === 'declined' ? 'think' : 'loading'} size={200} />
             <Text style={s.matchTitle}>{match.phase === 'declined' ? `${match.rival.name} can't play right now` : `Waiting for ${match.rival.name} to accept…`}</Text>
             <Text style={s.small}>{match.phase === 'declined' ? 'Finding you a new rival…' : 'Asking for a rematch'}</Text>
             <View style={{ flexDirection: 'row', alignItems: 'center', gap: 14 }}>
@@ -1512,13 +1522,13 @@ function App() {
         ) : null}
 
         {q.passage ? (
-          <Animated.View style={[s.passage, { opacity: q.enter }]}>
+          <Animated.View style={[s.passage, { opacity: FADE ? q.enter : 1 }]}>
             <Text style={s.passageText}>{q.passage}</Text>
           </Animated.View>
         ) : null}
 
         <View>
-          <Animated.View style={[s.qCard, q.passage && { minHeight: 0 }, { opacity: q.enter, transform: [{ translateX: q.enter.interpolate({ inputRange: [0, 1], outputRange: [16, 0] }) }] }]}>
+          <Animated.View style={[s.qCard, q.passage && { minHeight: 0 }, { opacity: FADE ? q.enter : 1, transform: [{ translateX: q.enter.interpolate({ inputRange: [0, 1], outputRange: [16, 0] }) }] }]}>
             <View style={s.qTop}>
               <Text style={s.typeChip} numberOfLines={1}>{CATS[q.cat].icon} {q.sub}</Text>
               <Text style={s.levelChip}>{LEVELS[q.level]}</Text>
@@ -1530,7 +1540,7 @@ function App() {
           <WitPop pop={g.wit} s={s} />
         </View>
 
-        <Animated.View style={{ gap: 10, opacity: q.enter, transform: [{ translateY: q.enter.interpolate({ inputRange: [0, 1], outputRange: [10, 0] }) }] }}>
+        <Animated.View style={{ gap: 10, opacity: FADE ? q.enter : 1, transform: [{ translateY: q.enter.interpolate({ inputRange: [0, 1], outputRange: [10, 0] }) }] }}>
           {optRows.map((r) => <View key={r.join()} style={{ flexDirection: 'row', gap: 10 }}>{r.map(renderOpt)}{r.length === 1 && twoCol ? <View style={{ flex: 1 }} /> : null}</View>)}
         </Animated.View>
 
@@ -1564,8 +1574,8 @@ function App() {
     const doublesLeft = 5 - (profile.doubles && profile.doubles.day === dayKey() ? profile.doubles.n : 0);
     const canDouble = !r.doubled && doublesLeft > 0 && r.xpGame > 0 && (adsSupported() ? rewardedReady() : __DEV__);
     const again = r.kind === 'blitz' && !r.forfeit
-      ? { label: `⚡ Rematch ${r.rival}`, go: () => startGame('blitz', { rematch: true }) }
-      : r.kind === 'daily' ? { label: '⚡ Play Blitz', go: () => startGame('blitz') }
+      ? { label: `Rematch ${r.rival}`, go: () => startGame('blitz', { rematch: true }) }
+      : r.kind === 'daily' ? { label: '▶ Play Blitz', go: () => startGame('blitz') }
         : { label: '▶ Play again', go: () => startGame(r.kind, r.kind === 'long' ? { n: r.total } : r.cat ? { cat: r.cat } : {}) };
     if (r.review) { again.label = '🎯 Train weak spot'; again.go = () => startGame('train', { cat: weakCat, sub: weakSub }); }
     body = (
@@ -1681,7 +1691,7 @@ function App() {
         onLayout={(e) => { scrollInfo.current.h = e.nativeEvent.layout.height; }}
         onContentSizeChange={(w, h2) => { scrollInfo.current.ch = h2; }}
       >
-        <Animated.View style={{ gap: 16, opacity: pageAnim, transform: [{ translateY: pageAnim.interpolate({ inputRange: [0, 1], outputRange: [12, 0] }) }] }}>
+        <Animated.View style={{ gap: 16, opacity: FADE ? pageAnim : 1, transform: [{ translateY: pageAnim.interpolate({ inputRange: [0, 1], outputRange: [12, 0] }) }] }}>
           {body}
         </Animated.View>
       </ScrollView>

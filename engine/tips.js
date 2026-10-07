@@ -84,7 +84,7 @@ export const TIPS = {
   'Error Spotting': 'Check subject-verb agreement, tense, articles, prepositions and pronouns, in that order.',
   Spelling: 'Watch for double letters (accommodate, committee), -ance/-ence and ie/ei.',
   Idioms: 'Idioms are never literal. Think of how you\'d use it in a sentence about people, not objects.',
-  'One-word Substitution': 'Learn word families: -cide (killing), -phobia (fear), -archy (rule), omni- (all).',
+  'One-word Substitution': 'Learn word families: -logy (study of), -phobia (fear), -archy (rule), omni- (all).',
   'Para Jumbles': 'Find the opening sentence (introduces the subject, no pronoun), then follow pronouns, time words and cause → effect.',
   'Reading Comprehension': 'The right option restates the passage. Wrong options exaggerate, add new ideas or twist a detail.',
   // Visual

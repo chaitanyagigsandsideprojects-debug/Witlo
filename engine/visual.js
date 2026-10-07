@@ -53,7 +53,7 @@ function dice(k) {
     const okDice = ALL_DICE.filter((d) => views.every((v) => v.every((x, i) => v.every((y, j) => i === j || opp(d, x) !== y))));
     const cands = [1, 2, 3, 4, 5, 6].filter((x) => new Set(okDice.map((d) => opp(d, x))).size === 1);
     if (!cands.length) continue; const f = k.pick(cands); const ans = opp(die, f);
-    return { prompt: `These are different views of the same die. Which number is opposite ${f}?`, vis: { kind: 'dice', views }, ans, opts: [ans, ...k.pickN([1, 2, 3, 4, 5, 6].filter((x) => x !== ans && x !== f), 3)], why: `${ans} never appears next to ${f}, and every other number does`, steps: 'A number seen in the same view as another is adjacent to it, never opposite. List each number\'s neighbours; the one that never shares a view with it is opposite.', p: [...views.flat(), f], time: 40 };
+    return { prompt: `These are different views of the same dice. Which number is opposite ${f}?`, vis: { kind: 'dice', views }, ans, opts: [ans, ...k.pickN([1, 2, 3, 4, 5, 6].filter((x) => x !== ans && x !== f), 3)], why: `${ans} never appears next to ${f}, and every other number does`, steps: 'A number seen in the same view as another is adjacent to it, never opposite. List each number\'s neighbours; the one that never shares a view with it is opposite.', p: [...views.flat(), f], time: 40 };
   }
   return null;
 }

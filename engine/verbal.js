@@ -8,9 +8,9 @@ const Q = (o) => ({ cat: 'verbal', fast: true, deep: false, lv: [1, 3], words: t
 // [word, synonym, level]
 const SYN = [
   ['Rapid', 'Quick', 1], ['Abundant', 'Plentiful', 1], ['Vivid', 'Bright', 1], ['Diligent', 'Hard-working', 1], ['Fragile', 'Delicate', 1], ['Brief', 'Short', 1], ['Courage', 'Bravery', 1], ['Eager', 'Keen', 1], ['Enormous', 'Huge', 1], ['Gloomy', 'Sad', 1],
-  ['Honest', 'Truthful', 1], ['Idle', 'Inactive', 1], ['Jovial', 'Cheerful', 2], ['Lethal', 'Deadly', 1], ['Novice', 'Beginner', 1], ['Placid', 'Calm', 2], ['Quarrel', 'Argument', 1], ['Rigid', 'Stiff', 1], ['Scarce', 'Rare', 1], ['Timid', 'Shy', 1],
+  ['Honest', 'Truthful', 1], ['Idle', 'Inactive', 1], ['Jovial', 'Cheerful', 2], ['Novice', 'Beginner', 1], ['Placid', 'Calm', 2], ['Quarrel', 'Argument', 1], ['Rigid', 'Stiff', 1], ['Scarce', 'Rare', 1], ['Timid', 'Shy', 1],
   ['Vacant', 'Empty', 1], ['Wealthy', 'Rich', 1], ['Zeal', 'Enthusiasm', 2], ['Adept', 'Skilled', 2], ['Benevolent', 'Kind', 2], ['Conceal', 'Hide', 1], ['Deceive', 'Mislead', 1], ['Endeavour', 'Attempt', 2], ['Feeble', 'Weak', 1], ['Hazard', 'Danger', 1],
-  ['Imitate', 'Copy', 1], ['Lament', 'Mourn', 2], ['Mend', 'Repair', 1], ['Obstinate', 'Stubborn', 2], ['Precise', 'Exact', 1], ['Reluctant', 'Unwilling', 2], ['Absurd', 'Ridiculous', 1], ['Commence', 'Begin', 1], ['Evident', 'Obvious', 1], ['Fatigue', 'Tiredness', 1],
+  ['Imitate', 'Copy', 1], ['Mend', 'Repair', 1], ['Obstinate', 'Stubborn', 2], ['Precise', 'Exact', 1], ['Reluctant', 'Unwilling', 2], ['Absurd', 'Ridiculous', 1], ['Commence', 'Begin', 1], ['Evident', 'Obvious', 1], ['Fatigue', 'Tiredness', 1],
   ['Genuine', 'Real', 1], ['Obsolete', 'Outdated', 2], ['Ponder', 'Reflect', 2], ['Rebuke', 'Scold', 2], ['Vanish', 'Disappear', 1], ['Hinder', 'Obstruct', 2], ['Fortunate', 'Lucky', 1], ['Fury', 'Rage', 1], ['Loyal', 'Faithful', 1], ['Vital', 'Essential', 1],
   ['Ambiguous', 'Unclear', 2], ['Candid', 'Frank', 2], ['Meticulous', 'Careful', 2], ['Lucid', 'Clear', 2], ['Frugal', 'Thrifty', 2], ['Gregarious', 'Sociable', 3], ['Ephemeral', 'Short-lived', 3], ['Ubiquitous', 'Everywhere', 3], ['Pragmatic', 'Practical', 2], ['Tenacious', 'Persistent', 2],
   ['Verbose', 'Wordy', 3], ['Zealous', 'Passionate', 2], ['Austere', 'Plain', 3], ['Cogent', 'Convincing', 3], ['Diffident', 'Unconfident', 3], ['Eloquent', 'Articulate', 2], ['Fervent', 'Intense', 2], ['Gullible', 'Easily fooled', 2], ['Impetuous', 'Rash', 3], ['Laconic', 'Brief in speech', 3],
@@ -97,7 +97,7 @@ const IDIOMS = [
   ['Call it a day', 'Stop working for now'], ['In hot water', 'In trouble'], ['Beat around the bush', 'Avoid the main topic'], ['Back to square one', 'Start again from the beginning'], ['The ball is in your court', 'It is your decision now'],
   ['Cry over spilt milk', 'Regret what cannot be undone'], ['Keep your chin up', 'Stay cheerful in difficulty'], ['On cloud nine', 'Extremely happy'], ['Turn a blind eye', 'Ignore something wrong deliberately'], ['A blessing in disguise', 'Something good that seemed bad at first'],
   ['Pull someone\'s leg', 'Tease someone playfully'], ['Hit the sack', 'Go to bed'], ['Add fuel to the fire', 'Make a bad situation worse'], ['Get cold feet', 'Become nervous before a big step'], ['Throw in the towel', 'Give up'],
-  ['Kill two birds with one stone', 'Achieve two things with one action'], ['Under the same roof', 'Living in the same house'], ['Go the extra mile', 'Make more effort than expected'], ['A drop in the ocean', 'A very small amount compared to what is needed'],
+  ['Under the same roof', 'Living in the same house'], ['Go the extra mile', 'Make more effort than expected'], ['A drop in the ocean', 'A very small amount compared to what is needed'],
   ['Hit the books', 'Study hard'], ['Miss the boat', 'Lose an opportunity'], ['On thin ice', 'In a risky situation'], ['Sit on the fence', 'Avoid choosing a side'], ['The last straw', 'The final problem that makes a situation unbearable'],
   ['Make ends meet', 'Earn just enough to live on'], ['Steal the show', 'Get the most attention'], ['A penny for your thoughts', 'Asking what someone is thinking'], ['Down to earth', 'Practical and humble'], ['Face the music', 'Accept the consequences'], ['Get the ball rolling', 'Start something'],
 ];
@@ -105,12 +105,12 @@ const ONEWORD = [
   ['A person who cannot be corrected', 'Incorrigible'], ['Fear of heights', 'Acrophobia'], ['A speech made without preparation', 'Extempore'], ['One who knows everything', 'Omniscient'], ['A life history written by oneself', 'Autobiography'],
   ['That which cannot be read', 'Illegible'], ['A person who does not believe in God', 'Atheist'], ['One who eats too much', 'Glutton'], ['Something no longer in use', 'Obsolete'], ['A place where bees are kept', 'Apiary'],
   ['A cure for all diseases', 'Panacea'], ['One who loves mankind', 'Philanthropist'], ['A word with the same meaning as another', 'Synonym'], ['Government by the people', 'Democracy'], ['A person who is new to a field', 'Novice'],
-  ['That which cannot be avoided', 'Inevitable'], ['A place where dead bodies are kept', 'Mortuary'], ['Animals that eat only plants', 'Herbivores'], ['A person who speaks many languages', 'Polyglot'], ['Happening once a year', 'Annual'],
+  ['That which cannot be avoided', 'Inevitable'], ['Animals that eat only plants', 'Herbivores'], ['A person who speaks many languages', 'Polyglot'], ['Happening once a year', 'Annual'],
   ['Study of birds', 'Ornithology'], ['A collection of poems', 'Anthology'], ['Fear of water', 'Hydrophobia'], ['One who walks in sleep', 'Somnambulist'], ['Incapable of being seen', 'Invisible'],
   ['A person who hates women', 'Misogynist'], ['A handwriting that cannot be read', 'Illegible'], ['Medicine that kills germs', 'Antiseptic'], ['A person who leaves their country to live elsewhere', 'Emigrant'], ['A list of items for discussion at a meeting', 'Agenda'],
   ['A person who is unable to pay debts', 'Insolvent'], ['One who doubts everything', 'Sceptic'], ['A person with long experience in a field', 'Veteran'], ['One who thinks only of himself', 'Egoist'], ['That which cannot be wrong', 'Infallible'],
   ['A lack of variety; dull sameness', 'Monotony'], ['A person who always expects the worst', 'Pessimist'], ['A word opposite in meaning', 'Antonym'], ['Fear of closed spaces', 'Claustrophobia'], ['A place where birds are kept', 'Aviary'],
-  ['A list of books referred to', 'Bibliography'], ['Murder of a king', 'Regicide'], ['A person who eats no meat', 'Vegetarian'], ['That which can be eaten', 'Edible'], ['A building where weapons are stored', 'Armoury'],
+  ['A list of books referred to', 'Bibliography'], ['A person who eats no meat', 'Vegetarian'], ['That which can be eaten', 'Edible'], ['A building where weapons are stored', 'Armoury'],
 ];
 const OW_POOL = ONEWORD.map((x) => x[1]).concat(['Optimist', 'Egoist', 'Pessimist', 'Hypocrite', 'Monotony', 'Sceptic', 'Veteran', 'Fanatic', 'Infallible', 'Insolvent']);
 
