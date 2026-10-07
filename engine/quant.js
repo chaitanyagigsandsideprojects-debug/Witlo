@@ -450,4 +450,82 @@ export default [
     const r = 7 * k.ri(1, 2), h = 3 * k.ri(2, 8); const ans = (22 / 7) * r * r * h / 3;
     return { prompt: `Volume of a cone with radius ${r} cm and height ${h} cm? (π = 22/7)`, ans, post: ' cm³', wrong: [ans * 3, ans / 2 * 3 > 0 ? (22 / 7) * r * h : ans + 22, ans + 154].filter((v) => Number.isInteger(v)), step: 22, why: `⅓πr²h = ⅓ × 22/7 × ${r}² × ${h} = ${k.fmtIN(ans)} cm³`, steps: 'A cone holds exactly one third of the cylinder with the same base and height.', p: [t, r, h] };
   } }),
+  // ---------------- Different ways of thinking (experience variety) ----------------
+  Q({ id: 'q.pct.trap', sub: 'Percentages', lv: [2, 3], time: 22, gen(k, L) {
+    const t = k.pick(L === 2 ? ['updown', 'back'] : ['updown', 'back', 'twoyears']);
+    if (t === 'updown') {
+      const a = k.pick([10, 20, 30, 40, 50]); const it = k.pick(ITEMS); const loss = (a * a) / 100;
+      return { prompt: `A ${it}'s price goes up ${a}% and then comes down ${a}%. Which is true?`, ans: `It ends ${loss}% lower`, opts: [`It ends ${loss}% lower`, 'It is back to the original', `It ends ${loss}% higher`, `It ends ${a}% lower`], why: `Take 100: +${a}% → ${100 + a}; −${a}% of ${100 + a} = ${((100 + a) * a) / 100} → ${100 - loss}. The fall is taken on a bigger number, so it ends ${loss}% lower`, steps: `Shortcut: up a% then down a% always ends a²/100 % lower: ${a}²/100 = ${loss}%.`, p: [t, a] };
+    }
+    if (t === 'back') {
+      const [a, b, bs] = k.pick([[20, 25, '25%'], [25, 100 / 3, '33⅓%'], [50, 100, '100%'], [40, 200 / 3, '66⅔%'], [10, 100 / 9, '11⅑%']]);
+      const wrong = [`${a}%`, `${a + 5}%`, `${Math.round(b + 10)}%`, `${Math.round(a / 2)}%`].filter((x) => x !== bs);
+      return { prompt: `A salary is cut by ${a}%. By what percent must it now rise to get back to the original?`, ans: bs, opts: [bs, ...wrong.slice(0, 3)], why: `Take 100 → cut to ${100 - a}. To get back, it must gain ${a} on ${100 - a}: ${a}/${100 - a} = ${bs}`, steps: `The rise is measured on the smaller, reduced amount, so it is always more than ${a}%.`, p: [t, a] };
+    }
+    const r = k.pick([10, 20, 5]); const tot = Math.round(((1 + r / 100) ** 2 - 1) * 10000) / 100;
+    return { prompt: `A town grows ${r}% every year. Over 2 years, how much does it grow in total?`, ans: `${tot}%`, opts: [`${tot}%`, `${2 * r}%`, `${r * r}%`, `${tot + r}%`], why: `Year 2 grows on the bigger number: ${r} + ${r} + (${r} × ${r})/100 = ${tot}%, not ${2 * r}%`, p: [t, r] };
+  } }),
+  Q({ id: 'q.spot.step', sub: 'Profit & Loss', lv: [2, 3], time: 30, gen(k) {
+    const t = k.pick(['cp', 'avg']); const bad = k.ri(0, 3); // 0 = no mistake, else the wrong step
+    if (t === 'cp') {
+      const p = k.pick([10, 20, 25, 50]); const cp = 40 * k.ri(5, 60); const sp = (cp * (100 + p)) / 100; const [x] = k.pickN(NAMES, 1);
+      const wrongCp = Math.round(sp - (sp * p) / 100);
+      const steps = [
+        bad === 1 ? `Step 1: Profit is ${p}% of the selling price.` : `Step 1: Profit is ${p}% of the cost price.`,
+        bad === 2 ? `Step 2: So SP = CP × ${(100 - p) / 100}.` : `Step 2: So SP = CP × ${(100 + p) / 100}.`,
+        bad === 3 ? `Step 3: CP = ${k.fmtIN(sp)} − ${p}% of ${k.fmtIN(sp)} = ₹${k.fmtIN(wrongCp)}.` : `Step 3: CP = ${k.fmtIN(sp)} ÷ ${(100 + p) / 100} = ₹${k.fmtIN(cp)}.`,
+      ];
+      if (bad === 3 && wrongCp === cp) return null;
+      const ans = bad ? `Step ${bad}` : 'No mistake';
+      const fix = { 0: `Every step is right: CP = ${k.fmtIN(sp)} ÷ ${(100 + p) / 100} = ₹${k.fmtIN(cp)}`, 1: `Profit % is always on the cost price, not the selling price`, 2: `A profit means SP is bigger: SP = CP × ${(100 + p) / 100}`, 3: `Taking ${p}% off the SP is the classic trap: CP = ${k.fmtIN(sp)} ÷ ${(100 + p) / 100} = ₹${k.fmtIN(cp)}` }[bad];
+      return { prompt: `${x} solved this: "A shop sells a fan for ₹${k.fmtIN(sp)} at a ${p}% profit. Find the cost price." Which step has the mistake?`, passage: steps.join('\n'), ans, opts: ['Step 1', 'Step 2', 'Step 3', 'No mistake'], keepOrder: true, why: fix, p: [t, p, cp, bad] };
+    }
+    const n = k.ri(4, 8); const a = k.ri(15, 40); const b = a - k.ri(1, 4); const tot = n * a; const nt = (n - 1) * b; const rem = tot - nt; if (rem <= 0) return null;
+    const steps = [
+      bad === 1 ? `Step 1: Total of ${n} numbers = ${n} + ${a} = ${n + a}.` : `Step 1: Total of ${n} numbers = ${n} × ${a} = ${tot}.`,
+      bad === 2 ? `Step 2: Total of the remaining ${n - 1} = ${n} × ${b} = ${n * b}.` : `Step 2: Total of the remaining ${n - 1} = ${n - 1} × ${b} = ${nt}.`,
+      bad === 3 ? `Step 3: Removed number = ${a} − ${b} = ${a - b}.` : `Step 3: Removed number = ${tot} − ${nt} = ${rem}.`,
+    ];
+    const ans = bad ? `Step ${bad}` : 'No mistake';
+    const fix = { 0: `All correct: ${tot} − ${nt} = ${rem}`, 1: `Total = average × count = ${n} × ${a} = ${tot}`, 2: `Only ${n - 1} numbers remain: ${n - 1} × ${b} = ${nt}`, 3: `Subtract totals, not averages: ${tot} − ${nt} = ${rem}` }[bad];
+    return { prompt: `The average of ${n} numbers is ${a}. One number is removed and the average becomes ${b}. Which step of this solution has the mistake?`, passage: steps.join('\n'), ans, opts: ['Step 1', 'Step 2', 'Step 3', 'No mistake'], keepOrder: true, why: fix, p: [t, n, a, b, bad] };
+  } }),
+  Q({ id: 'q.trick', sub: 'Mental math', lv: [1, 3], time: 12, gen(k, L) {
+    const t = k.pick(L === 1 ? ['sq5', 'x5'] : L === 2 ? ['sq5', 'near', 'x99'] : ['near', 'x99', 'sqnear']);
+    if (t === 'sq5') { const n = k.ri(2, 12); const a = 10 * n + 5; return { prompt: 'Quick trick!', emph: `${a}²`, ans: a * a, wrong: [a * a + 100, a * a - 100, n * (n + 1) * 10 + 25], step: 100, why: `Ends in 5: ${n} × ${n + 1} = ${n * (n + 1)}, then write 25 → ${k.fmtIN(a * a)}`, p: [t, n] }; }
+    if (t === 'x5') { const a = 2 * k.ri(11, 249); return { prompt: 'Quick trick!', emph: `${a} × 5`, ans: a * 5, wrong: [a * 5 + 10, a * 5 - 10, a * 50], step: 10, why: `× 5 = × 10 ÷ 2: ${a * 10} ÷ 2 = ${k.fmtIN(a * 5)}`, p: [t, a] }; }
+    if (t === 'near') { const m = 10 * k.ri(3, 9); const d = k.ri(1, 4); return { prompt: 'Quick trick!', emph: `${m - d} × ${m + d}`, ans: m * m - d * d, wrong: [m * m, m * m + d * d, m * m - 2 * d], step: d, why: `(${m} − ${d})(${m} + ${d}) = ${m}² − ${d}² = ${m * m} − ${d * d} = ${k.fmtIN(m * m - d * d)}`, p: [t, m, d] }; }
+    if (t === 'x99') { const a = k.ri(12, 89); const z = k.pick([9, 99]); return { prompt: 'Quick trick!', emph: `${a} × ${z}`, ans: a * z, wrong: [a * z + a, a * z - a, a * (z + 1)], step: a, why: `× ${z} = × ${z + 1} − once: ${k.fmtIN(a * (z + 1))} − ${a} = ${k.fmtIN(a * z)}`, p: [t, a, z] }; }
+    const b = k.pick([100, 50]); const d = k.ri(1, 4) * k.pick([1, -1]); const n = b + d;
+    return { prompt: 'Quick trick!', emph: `${n}²`, ans: n * n, wrong: [n * n + 2 * Math.abs(d), b * b + d * d, n * n - 100], step: 2 * Math.abs(d), why: `(${b} ${d > 0 ? '+' : '−'} ${Math.abs(d)})² = ${k.fmtIN(b * b)} ${d > 0 ? '+' : '−'} ${2 * b * Math.abs(d)} + ${d * d} = ${k.fmtIN(n * n)}`, p: [t, n] };
+  } }),
+  Q({ id: 'q.compare.vals', sub: 'Simplification', lv: [2, 3], time: 22, gen(k, L) {
+    const F = [[12.5, 1, 8], [25, 1, 4], [37.5, 3, 8], [20, 1, 5], [40, 2, 5], [75, 3, 4], [60, 3, 5]];
+    const items = []; const seen = new Set();
+    let guard = 0;
+    while (items.length < 4 && guard++ < 40) {
+      const kind = k.pick(['pct', 'frac', 'mul']); let text; let val;
+      if (kind === 'pct') { const [pp, n1, d1] = k.pick(F); const X = d1 * k.ri(10, 60); text = `${pp}% of ${X}`; val = (X * n1) / d1; }
+      else if (kind === 'frac') { const d = k.pick([3, 4, 5, 6, 7, 9]); const n = k.ri(1, d - 1); if (k.gcd(n, d) !== 1) continue; const X = d * k.ri(10, 50); text = `${n}/${d} of ${X}`; val = (X * n) / d; }
+      else { const a = k.ri(12, 48), b = k.ri(3, 9); text = `${a} × ${b}`; val = a * b; }
+      if (seen.has(val) || items.some((x) => Math.abs(x.val - val) < 4)) continue; seen.add(val); items.push({ text, val });
+    }
+    if (items.length < 4) return null;
+    const big = L >= 3 ? k.chance(0.5) : true; const sorted = [...items].sort((a, b) => b.val - a.val); const ans = (big ? sorted[0] : sorted[3]).text;
+    return { prompt: `Which is the ${big ? 'largest' : 'smallest'}?`, ans, opts: items.map((x) => x.text), why: `${sorted.map((x) => `${x.text} = ${x.val}`).join(', ')} → ${ans}`, steps: 'Turn percentages into fractions (37.5% = 3/8, 60% = 3/5) and estimate before calculating exactly.', p: items.map((x) => x.text) };
+  } }),
+  Q({ id: 'q.prob.intuition', sub: 'Probability', lv: [2, 4], time: 25, gen(k) {
+    const B = [
+      ['A fair coin lands heads 5 times in a row. Probability the next toss is heads?', '1/2', ['1/32', '1/64', 'Less than 1/2'], 'Coins have no memory: every toss is still 1/2. Expecting a "correction" is the gambler\'s fallacy'],
+      ['A family has two children. The older one is a boy. Probability both are boys?', '1/2', ['1/3', '1/4', '2/3'], 'Only the younger child is unknown: boy or girl, 1/2'],
+      ['A family has two children and at least one is a boy. Probability both are boys?', '1/3', ['1/2', '1/4', '2/3'], 'Possible families: BB, BG, GB (GG is ruled out). Only 1 of these 3 is BB'],
+      ['Two dice are rolled. Which total is most likely?', '7', ['12', '6', 'All totals are equally likely'], '7 can be made 6 ways (1+6, 2+5, 3+4 and reversed): more than any other total'],
+      ['A die is rolled twice. Probability of at least one six?', '11/36', ['1/3', '1/6', '1/36'], 'Use 1 − P(no six) = 1 − (5/6)² = 1 − 25/36 = 11/36. Adding 1/6 + 1/6 counts double six twice'],
+      ['You pick 1 of 3 boxes; one hides a prize. The host opens an empty box you didn\'t pick and offers a switch. Chance of winning if you switch?', '2/3', ['1/2', '1/3', 'It makes no difference'], 'Your first pick is right only 1/3 of the time; switching wins the other 2/3'],
+      ['In a group of 23 people, roughly what is the chance that two share a birthday?', 'About 50%', ['About 6%', 'About 23%', 'Almost 0%'], 'There are 253 possible pairs among 23 people, so a shared birthday is surprisingly likely: about 50%'],
+      ['Three coins are tossed. Probability of getting exactly 2 heads?', '3/8', ['2/3', '1/2', '1/4'], 'HHT, HTH, THH: 3 of the 8 equally likely outcomes'],
+    ];
+    const [q, a, w, why] = k.pick(B);
+    return { prompt: q, ans: a, opts: [a, ...w], why, p: [q] };
+  } }),
 ];

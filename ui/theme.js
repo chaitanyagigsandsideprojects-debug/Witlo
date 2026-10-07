@@ -123,7 +123,7 @@ export function makeStyles(C) {
     nextBar: { position: 'absolute', left: 0, right: 0, bottom: 0, paddingHorizontal: 16, paddingTop: 12, backgroundColor: C.bg, borderTopWidth: 1, borderColor: C.line, shadowColor: '#000', shadowOpacity: 0.08, shadowRadius: 14, shadowOffset: { width: 0, height: -4 }, elevation: 10 },
     frameGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
     frameTile: { width: '31.6%', alignItems: 'center', gap: 4, paddingVertical: 14, paddingHorizontal: 6, borderRadius: 20, backgroundColor: C.card, borderWidth: 2, borderColor: 'transparent', ...edge },
-    frameName: { fontFamily: F.b, fontSize: 14, color: C.ink, marginTop: 8 },
+    frameName: { fontFamily: F.b, fontSize: 13, color: C.ink, marginTop: 8 },
     frameStatus: { fontFamily: F.m, fontSize: 11.5, color: C.muted },
     mistake: { borderRadius: 18, padding: 14, gap: 6, backgroundColor: C.bg, borderWidth: 1, borderColor: C.line },
     mistakeQ: { fontFamily: F.b, fontSize: 15, lineHeight: 21, color: C.ink },

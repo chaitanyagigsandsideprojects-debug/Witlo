@@ -8,6 +8,9 @@ import di from './di';
 import verbal from './verbal';
 import visual from './visual';
 import { TIPS } from './tips';
+import { initDirector, directQuestion, sampleDaily, sessionMetrics } from './director';
+import { taxoOf, TAXO, SKILLS, ARCHS, FAMILIES } from './taxonomy';
+export { sessionMetrics, taxoOf, TAXO, SKILLS, ARCHS, FAMILIES };
 
 export { CATS, CAT_KEYS, LEVELS, seeded, hash };
 export const TEMPLATES = [...quant, ...logic, ...di, ...verbal, ...visual];
@@ -64,13 +67,24 @@ export function nextQuestion(ctx) {
   const T = k.pick(TEMPLATES.filter((t) => t.fast)); return make(T, k, T.lv[0], () => true, 30);
 }
 
-// Daily 5: same five for everyone today, one from each category, gently rising
-export function dailyFive(dateSeed) {
-  const rand = seeded(dateSeed); const k = kit(rand); const out = []; const diffs = [180, 320, 420, 520, 620];
-  const cats = k.shuffle(CAT_KEYS);
-  cats.forEach((cat, i) => { let q = null; for (let t = 0; t < 10 && !q; t++) q = nextQuestion({ mode: 'daily', rand, cat, diff: diffs[i], recentTids: out.map((x) => x.tid) }); if (q) out.push(q); });
-  return out;
+// Experience Director entry point: picks what this player should experience next, then generates it.
+// Falls back to the plain engine if nothing fits. ctx adds `log` (this session's answers) to nextQuestion's ctx.
+export function nextExperience(ctx) {
+  let focusFamily = null;
+  if (ctx.mode === 'train' && ctx.cat && !ctx.sub && ctx.history) {
+    // weakest family of concepts inside the area (lowest recent accuracy among the ones seen), else the least explored
+    const fams = {}; TEMPLATES.filter((T) => T.cat === ctx.cat).forEach((T) => { const f = taxoOf(T.id).family; const c = ctx.history.concepts[T.id]; const x = fams[f] || (fams[f] = { a: 0, e: 0 }); if (c) { x.a += c.a; x.e += c.e * c.a; } });
+    const list = Object.entries(fams).map(([f, v]) => [f, v.a >= 4 ? v.e / v.a : 0.5 + 0.1 / (1 + v.a)]).sort((a, b) => a[1] - b[1]);
+    focusFamily = list.length ? list[0][0] : null;
+  }
+  const q = directQuestion({ ...ctx, focusFamily });
+  if (q) return q;
+  const p = nextQuestion(ctx); const tx = taxoOf(p.tid);
+  return { ...p, intent: 'practice', skill: tx.skill, arch: tx.arch, family: tx.family, aha: tx.aha, concept: tx.name };
 }
+
+// Daily 5: same five for everyone today, one per category, five different experiences, gently rising
+export function dailyFive(dateSeed) { return sampleDaily(seeded(dateSeed)); }
 
 // Adaptive skill update for one answer (per-category skill, 0–1000), Elo-style against question difficulty.
 // n = answers so far in this area (early answers move skill faster).
@@ -80,3 +94,5 @@ export function updateSkill(skill, q, ok, secs, n = 20) {
   const fastBonus = ok && secs <= Math.max(3, q.time * 0.35) ? 3 : 0;
   return clamp(Math.round(skill + K * ((ok ? 1 : 0) - E) + fastBonus), 40, 980);
 }
+
+initDirector({ TEMPLATES, MIX, eligible, levelOf, BY_ID });

@@ -12,7 +12,7 @@ import { captureRef } from 'react-native-view-shot';
 import { LinearGradient } from 'expo-linear-gradient';
 import { initAds, showInterstitial, showRewarded, rewardedReady, adsSupported, onAdsChange } from './ads';
 import { askReminderPermission, scheduleReminders, cancelReminders, remindersSupported } from './reminders';
-import { CATS, CAT_KEYS, LEVELS, seeded, nextQuestion, dailyFive, updateSkill } from './engine';
+import { CATS, CAT_KEYS, LEVELS, seeded, nextExperience, dailyFive, updateSkill, sessionMetrics, SKILLS, TEMPLATES } from './engine';
 import { QHistory } from './engine/history';
 import { TIERS, tierOf, tierProgress, levelOf, missionsFor, advanceMissions, ACHIEVEMENTS, checkAchievements, xpFor, WIT } from './game/progress';
 import { INFO } from './game/info';
@@ -547,8 +547,8 @@ function App() {
       // Adaptive: your skill in that area, warmed up at the start, nudged by recent form; Survival climbs every 5 right
       const ramp = g.kind === 'blitz' || g.kind === 'rush' ? (g.qi < 3 ? -110 : g.qi < 8 ? 0 : 90) : g.kind === 'long' ? 160 : g.kind === 'survival' ? -120 + Math.floor(g.correct / 5) * 90 : 0;
       const formAdj = g.kind === 'blitz' || g.kind === 'rush' ? clamp(g.correct - (g.answered - g.correct) * 2, -4, 6) * 12 : 0;
-      q = nextQuestion({
-        mode: g.kind, history: H, cat: g.tids ? null : g.cat || null, sub: g.tids ? null : g.sub || null, tids: g.tids, recentTids: g.recentTids,
+      q = nextExperience({
+        mode: g.kind, history: H, log: g.log, cat: g.tids ? null : g.cat || null, sub: g.tids ? null : g.sub || null, tids: g.tids, recentTids: g.recentTids,
         diff: (cat) => clamp(H.skill(cat) + ramp + g.dOffset + formAdj, 40, 980),
       });
     }
@@ -611,7 +611,8 @@ function App() {
     if (kind === 'train' && !cat) { cat = H.weakest(CAT_KEYS); sub = H.weakestSub(cat); }
     const g = {
       kind, paced, cat, sub, total: kind === 'daily' ? 5 : kind === 'long' ? opts.n || 5 : kind === 'train' ? (opts.tids ? Math.min(8, Math.max(4, opts.tids.length * 2)) : 8) : 0, lives: kind === 'survival' ? 3 : 0,
-      mistakes: [], tids: opts.tids || null, review: !!opts.review,
+      mistakes: [], tids: opts.tids || null, review: !!opts.review, log: [], discovered: [], masteredNow: [],
+      skill0: Object.fromEntries(CAT_KEYS.map((k) => [k, H.cats[k] && H.cats[k].a >= 3 ? Math.round(H.skill(k) / 10) : null])),
       qi: 0, me: 0, rv: 0, answered: 0, correct: 0, combo: 0, maxCombo: 0, times: [], marks: [], catStats: {}, fastCount: 0, under2: 0, fastest: null, points: 0,
       locked: false, running: true, paused: false, picked: null, feedback: null, recentTids: [], wit: null, reacts: [], lastReact: 0,
       // the rival answers at a pace that lands near plan.target right answers in 60 s (see planDuel)
@@ -665,7 +666,11 @@ function App() {
     if (!g || !g.running || g.locked || g.paused || (shown && shown !== g.q)) return;
     g.locked = true;
     const q = g.q; const ok = i >= 0 && q.opts[i] === q.ans; const secs = (Date.now() - g.qStart) / 1000;
-    const H = histRef.current; H.answer(q, ok, secs); H.setSkill(q.cat, updateSkill(H.skill(q.cat), q, ok, secs, (H.cats[q.cat] && H.cats[q.cat].a) || 0));
+    const H = histRef.current; const before = H.conceptState(q.tid); H.answer(q, ok, secs);
+    const after = H.conceptState(q.tid);
+    if (before === 'new' && q.concept && !g.discovered.includes(q.concept)) g.discovered.push(q.concept);
+    if (after === 'mastered' && before !== 'mastered' && q.concept) g.masteredNow.push(q.concept);
+    g.log.push({ tid: q.tid, ok, secs, time: q.time, diff: q.diff, skill: q.skill, arch: q.arch, family: q.family, cat: q.cat, sub: q.sub, aha: q.aha, intent: q.intent }); H.setSkill(q.cat, updateSkill(H.skill(q.cat), q, ok, secs, (H.cats[q.cat] && H.cats[q.cat].a) || 0));
     const cs = g.catStats[q.cat] || (g.catStats[q.cat] = { a: 0, c: 0 }); cs.a += 1;
     g.answered += 1; g.times.push(secs); g.picked = i;
     const prevCombo = g.combo;
@@ -694,7 +699,7 @@ function App() {
     if (g.kind === 'daily') g.marks.push(ok ? '🟩' : '🟥');
     if (!ok && g.mistakes.length < 12) g.mistakes.push({ tid: q.tid, cat: q.cat, sub: q.sub, prompt: q.prompt, emph: q.optKind ? null : q.emph, passage: q.passage, ans: q.optKind ? null : q.ans, mine: i >= 0 && !q.optKind ? q.opts[i] : null, why: q.why, steps: q.steps, tip: q.tip, vis: !!q.vis });
     const whyHasAns = q.why.toLowerCase().includes(String(q.ans).toLowerCase());
-    g.feedback = { ok, fast: ok && secs < 3, text: ok ? (g.combo >= 3 ? `🔥 ${g.combo} COMBO · ${q.why}` : `Nice! ${q.why}`) : (i < 0 ? `⏱ Time's up · ${q.optKind ? q.why : `Answer: ${q.ans}`}` : q.optKind || whyHasAns ? `✕ ${q.why}` : `Answer: ${q.ans} · ${q.why}`) };
+    g.feedback = { ok, fast: ok && secs < 3, text: ok ? (g.combo >= 3 ? `🔥 ${g.combo} COMBO · ${q.why}` : q.aha ? `⚡ Quick trick: ${q.why}` : `Nice! ${q.why}`) : (i < 0 ? `⏱ Time's up · ${q.optKind ? q.why : `Answer: ${q.ans}`}` : q.optKind || whyHasAns ? `✕ ${q.why}` : `Answer: ${q.ans} · ${q.why}`) };
     g.qi += 1;
     force();
     if (g.paced) return; // paced modes wait for "Next"
@@ -798,6 +803,12 @@ function App() {
     const lvAfter = levelOf(P.xp);
     const tierUp = tierOf(P.score).index > tierBefore;
     const cats = Object.entries(g.catStats).map(([k, v]) => ({ cat: k, ...v }));
+    const metrics = sessionMetrics(g.log); if (metrics) H.logSession({ ...metrics, kind: g.kind, day: today });
+    const growth = [];
+    cats.forEach(({ cat }) => { const b = g.skill0[cat]; const a = H.cats[cat] && H.cats[cat].a >= 3 ? Math.round(H.skill(cat) / 10) : null; if (a != null && b != null && a !== b) growth.push(`${CATS[cat].icon} ${CATS[cat].name} skill ${b} → ${a}`); });
+    g.discovered.slice(0, 3).forEach((c) => growth.push(`✨ New concept: ${c}`));
+    g.masteredNow.slice(0, 2).forEach((c) => growth.push(`🏅 Mastered: ${c}`));
+    if (metrics && metrics.n >= 6) growth.push(`🧠 ${metrics.skills} kinds of thinking · ${metrics.concepts} concepts this game`);
     // Wit's verdict
     let title; let wit; let mood = 'happy';
     if (g.kind === 'blitz') {
@@ -822,12 +833,12 @@ function App() {
       key: Date.now(), rivalScore: g.rivalScore, kind: g.kind, out, forfeit, acc, avg, me: g.me, rv: g.rv, rival: g.rival, rivalAv: g.rivalAv, correct: g.correct, answered: g.answered, total: g.total,
       time: elapsed.toFixed(1), marks: g.marks, points: g.points, finished, cat: g.cat, title, wit, mood,
       score: P.score, delta, streak: P.streak, xpGain, xpGame, xpFrom, xpTo: P.xp, levelUp: lvAfter.lv > lvBefore ? lvAfter.lv : null,
-      tierUp, pbs, records, achs, missions: missions.gained, cats, bonus, mistakes: g.mistakes, review: g.review,
+      tierUp, pbs, records, achs, missions: missions.gained, cats, bonus, mistakes: g.mistakes, review: g.review, growth,
     };
     g.result = r; saveProfile(P); saveBrain(); reschedule(P);
     setCelebrate(g.kind === 'blitz' ? { from, to: P.score } : null);
     trophyAnim.setValue(0); xpAnim.setValue(levelOf(xpFrom).frac); setScreen('result');
-    const big = out === 1 || tierUp || (g.kind === 'daily' && g.correct === 5) || r.levelUp || achs.length || pbs.length;
+    const big = out === 1 || tierUp || g.masteredNow.length > 0 || (g.kind === 'daily' && g.correct === 5) || r.levelUp || achs.length || pbs.length;
     later(() => playSound(out === 1 || tierUp ? 'win' : g.kind === 'blitz' && !forfeit && out === 0 ? 'lose' : big ? 'reward' : 'correct'), 250);
     if (big) { setConfettiKey((k) => k + 1); haptic('success'); later(() => haptic('heavy'), 180); Animated.spring(trophyAnim, { toValue: 1, friction: 4, tension: 60, useNativeDriver: true }).start(); }
     else Animated.timing(trophyAnim, { toValue: 1, duration: 300, useNativeDriver: true }).start();
@@ -1233,8 +1244,21 @@ function App() {
         <View style={s.top}><Text style={s.h1}>Train</Text>{ThemeBtn}</View>
         <Wit s={s} mood="think" text={hasData ? `Your weak spot is ${CATS[weakCat].long}${weakSub ? `, especially ${weakSub}` : ''}. Let's fix it.` : `Answer at least 8 questions in two or more areas and I'll find your weak spot. Until then, try ${CATS[weakCat].long}: you've practised it least.`} />
         <View style={s.card}>
-          <View style={s.top}><Text style={s.label}>YOUR SKILL BY AREA (0–100)</Text><InfoBtn k="weak" /></View>
+          <View style={s.top}><Text style={s.label}>YOUR BRAIN</Text><InfoBtn k="weak" /></View>
           <CatBars rows={rows} skill />
+          {(() => {
+            const strong = H.strongestSkill(); const focus = weakCat; const fv = H.cats[focus] && H.cats[focus].a >= 3 ? Math.round(H.skill(focus) / 10) : null;
+            const week = CAT_KEYS.map((k) => { const w = H.weekAgo(k); const now = H.cats[k] && H.cats[k].a >= 3 ? H.skill(k) : null; return w != null && now != null ? [k, Math.round(now / 10) - Math.round(w / 10)] : null; }).filter((x) => x && x[1] > 0);
+            return (
+              <View style={{ gap: 4 }}>
+                {strong ? <Text style={s.fbText}>💪 Strength: <Text style={{ fontFamily: F.x }}>{SKILLS[strong]}</Text></Text> : null}
+                <Text style={s.fbText}>🎯 Current focus: <Text style={{ fontFamily: F.x }}>{CATS[focus].long}</Text></Text>
+                {fv != null ? <Text style={s.fbText}>🏁 Next milestone: <Text style={{ fontFamily: F.x }}>reach {Math.min(100, (Math.floor(fv / 10) + 1) * 10)} in {CATS[focus].name}</Text></Text> : null}
+                {week.length ? <Text style={s.fbText}>📈 This week: {week.map(([k, d]) => `${CATS[k].name} +${d}`).join(' · ')}</Text> : null}
+                <Text style={s.fbText}>🧭 Explored {H.explored()} of {TEMPLATES.length} concepts · {H.newThisWeek()} new this week · {H.masteredCount()} mastered</Text>
+              </View>
+            );
+          })()}
           <Text style={s.small}>{H.total} questions answered · skill rises faster with harder questions</Text>
         </View>
         <Bouncy onPress={() => startGame('train', { cat: weakCat, sub: weakSub })} style={[s.primary, { backgroundColor: CATS[weakCat].color }]} accessibilityLabel="Train weakness">
@@ -1512,13 +1536,16 @@ function App() {
 
         {g.paced && g.feedback ? (
           <View style={[s.fbCard, { borderColor: g.feedback.ok ? C.good : C.bad, backgroundColor: g.feedback.ok ? C.goodSoft : C.badSoft }]}>
-            <Text style={[s.fbTitle, { color: g.feedback.ok ? C.good : C.bad }]}>{g.feedback.ok ? `✓ Correct · +${10 * q.level}` : '✕ Not this time'}</Text>
+            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+              <Text style={[s.fbTitle, { color: g.feedback.ok ? C.good : C.bad, flex: 1 }]}>{g.feedback.ok ? `✓ Correct · +${10 * q.level}` : '✕ Not this time'}</Text>
+              {q.aha ? <Text style={[s.typeChip, { backgroundColor: C.rivalSoft, color: C.rival }]}>🧠 Insight</Text> : null}
+            </View>
             {!g.feedback.ok ? <Text style={s.fbText}>Answer: <Text style={{ fontFamily: F.x }}>{q.optKind ? 'the highlighted option' : q.ans}</Text></Text> : null}
             <Text style={s.fbText}>{q.why}</Text>
             {q.steps ? (showSteps ? <Text style={s.fbText}>{q.steps}</Text> : (
               <Pressable onPress={() => setShowSteps(true)} accessibilityRole="button" hitSlop={8}><Text style={[s.fbText, { color: C.rival, fontFamily: F.b }]}>Show full solution ›</Text></Pressable>
             )) : null}
-            {q.tip ? <Text style={s.fbText}><Text style={{ fontFamily: F.x }}>💡 Exam shortcut: </Text>{q.tip}</Text> : null}
+            {q.tip ? <Text style={s.fbText}><Text style={{ fontFamily: F.x }}>{q.aha ? '💡 Smart way: ' : '💡 Exam shortcut: '}</Text>{q.tip}</Text> : null}
           </View>
         ) : !g.paced ? (
           <Text style={[s.fb, g.feedback && { color: g.feedback.ok ? C.good : C.bad }]}>{g.feedback ? g.feedback.text : ' '}</Text>
@@ -1606,6 +1633,13 @@ function App() {
           {r.achs.map((a) => <View key={a.id} style={[s.bigBadge, { borderColor: C.accent, backgroundColor: C.accentSoft }]}><Text style={{ fontSize: 22 }}>{a.icon}</Text><View style={{ flex: 1 }}><Text style={[s.label, { color: C.ink }]}>ACHIEVEMENT UNLOCKED</Text><Text style={s.bigBadgeText}>{a.name} · {a.desc}</Text></View></View>)}
           {r.missions.map((m) => <View key={m.id} style={[s.bigBadge, { borderColor: C.good, backgroundColor: C.goodSoft }]}><Text style={{ fontSize: 22 }}>✅</Text><View style={{ flex: 1 }}><Text style={[s.label, { color: C.ink }]}>MISSION COMPLETE · +{m.xp} XP</Text><Text style={s.bigBadgeText}>{m.text}</Text></View></View>)}
         </View>
+
+        {r.growth && r.growth.length ? (
+          <View style={s.card}>
+            <Text style={s.label}>YOUR GROWTH</Text>
+            {r.growth.map((l) => <Text key={l} style={s.fbText}>{l}</Text>)}
+          </View>
+        ) : null}
 
         {r.mistakes && r.mistakes.length ? (
           <View style={s.card}>
