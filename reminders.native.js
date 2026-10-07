@@ -2,6 +2,7 @@
 // Reminders are rescheduled every time the player finishes a game,
 // so they only fire on days the player hasn't shown up.
 import { Platform } from 'react-native';
+import { MOTIVATION } from './game/motivation';
 
 let N = null;
 try {
@@ -47,7 +48,7 @@ export async function cancelReminders() {
 
 // name: username; streak: current streak; playedToday: boolean;
 // pb: best Blitz score (optional); improving: a category name the player is getting better at (optional)
-export async function scheduleReminders({ name, streak, playedToday, pb, improving }) {
+export async function scheduleReminders({ name, streak, playedToday, pb, improving, motivation = true }) {
   if (!N) return;
   try {
     await N.cancelAllScheduledNotificationsAsync();
@@ -81,6 +82,19 @@ export async function scheduleReminders({ name, streak, playedToday, pb, improvi
           : { type: N.SchedulableTriggerInputTypes.DATE, date },
       });
       slot += 1;
+    }
+    // Daily motivation: one warm line each morning for the next week (a different one every day)
+    if (motivation) {
+      const dayNo = Math.floor(Date.now() / 864e5);
+      for (let d = 0; d < 7; d++) {
+        const date = new Date(now); date.setDate(now.getDate() + d); date.setHours(8, 45, 0, 0);
+        if (date <= now) continue;
+        const [title, body] = MOTIVATION.daily[(dayNo + d) % MOTIVATION.daily.length];
+        await N.scheduleNotificationAsync({
+          content: { title, body, sound: false },
+          trigger: Platform.OS === 'android' ? { type: N.SchedulableTriggerInputTypes.DATE, date, channelId: CHANNEL } : { type: N.SchedulableTriggerInputTypes.DATE, date },
+        });
+      }
     }
   } catch (e) {
     /* reminders are optional */

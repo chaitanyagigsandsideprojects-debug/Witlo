@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useRef } from 'react';
-import { View, Pressable, StyleSheet, Animated, Easing, Dimensions, Image } from 'react-native';
+import { View, Pressable, StyleSheet, Animated, Easing, Dimensions, Image, Platform } from 'react-native';
 import { Text } from './emoji';
 import * as Haptics from 'expo-haptics';
 import { CONFETTI } from './theme';
@@ -21,16 +21,34 @@ export const CHARACTERS = [
   { id: 110, name: 'Shark', src: require('../assets/avatars/shark.webp') }, { id: 111, name: 'Fox', src: require('../assets/avatars/fox.webp') },
 ];
 
+// Haptics: Android uses its own system effects (crisper than a generic buzz) with a fallback;
+// iPhone uses the Taptic patterns. Every call is fire-and-forget and can never break the game.
+const AH = Haptics.AndroidHaptics || {};
+const ANDROID = { tap: AH.Virtual_Key, light: AH.Clock_Tick, tick: AH.Clock_Tick, success: AH.Confirm, error: AH.Reject, select: AH.Segment_Tick };
+let hapticsOn = true;
+export const setHapticsEnabled = (on) => { hapticsOn = !!on; };
 export const haptic = (kind) => {
+  if (!hapticsOn) return;
   try {
-    if (kind === 'tap') Haptics.selectionAsync();
-    else if (kind === 'light') Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-    else if (kind === 'medium') Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
-    else if (kind === 'heavy') Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Heavy);
-    else if (kind === 'error') Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
-    else if (kind === 'success') Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+    if (Platform.OS === 'android' && ANDROID[kind] && Haptics.performAndroidHapticsAsync) {
+      Haptics.performAndroidHapticsAsync(ANDROID[kind]).catch(() => fallback(kind)); return;
+    }
+    fallback(kind);
   } catch (e) { /* no haptics on this device */ }
 };
+function fallback(kind) {
+  try {
+    if (kind === 'tap' || kind === 'select') Haptics.selectionAsync();
+    else if (kind === 'light' || kind === 'tick') Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    else if (kind === 'medium') Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+    else if (kind === 'heavy') Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Heavy);
+    else if (kind === 'soft') Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Soft || Haptics.ImpactFeedbackStyle.Light);
+    else if (kind === 'error') Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning);
+    else if (kind === 'success') Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+  } catch (e) { /* ignore */ }
+}
+// a short rhythm of taps, e.g. for a win: [['success', 0], ['heavy', 180]]
+export const hapticPattern = (steps) => steps.forEach(([k, at]) => setTimeout(() => haptic(k), at));
 
 // A button is drawn in three layers: the press area (size/position), a shadow layer that scales on press,
 // and a content layer that clips rounded corners. Keeping shadow and clipping on separate layers matters:

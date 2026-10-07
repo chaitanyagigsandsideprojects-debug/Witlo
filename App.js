@@ -1,7 +1,7 @@
 import React, { useEffect, useMemo, useReducer, useRef, useState } from 'react';
 import {
   View, Pressable, StyleSheet, StatusBar, ScrollView, TextInput, Share, Linking,
-  useColorScheme, useWindowDimensions, Animated, Easing, KeyboardAvoidingView, Platform, BackHandler,
+  useColorScheme, useWindowDimensions, Animated, Easing, KeyboardAvoidingView, Platform, BackHandler, AppState,
 } from 'react-native';
 import { SafeAreaProvider, useSafeAreaInsets } from 'react-native-safe-area-context';
 import AsyncStorage from '@react-native-async-storage/async-storage';
@@ -18,11 +18,12 @@ import { TIERS, tierOf, tierProgress, levelOf, missionsFor, advanceMissions, ACH
 import { INFO } from './game/info';
 import { checkUsername } from './game/names';
 import { PALETTE, F, makeStyles } from './ui/theme';
-import { Bouncy, Avatar, Wit, WitArt, WitPop, Confetti, Stat, haptic, AVATARS, CHARACTERS } from './ui/parts';
+import { Bouncy, Avatar, Wit, WitArt, WitPop, Confetti, Stat, haptic, hapticPattern, AVATARS, CHARACTERS } from './ui/parts';
 import { QuestionVisual, Figure, FxText } from './ui/visuals';
 import { Text, Icon } from './ui/emoji';
 import { RankedAvatar, RANK_FRAMES, COSMETIC_FRAMES, COSMETIC_BY_ID, frameOwned, unlockProgress } from './ui/frames';
-import { initSounds, playSound, setSoundEnabled } from './ui/sound';
+import { initSounds, playSound, setSoundEnabled, setMusic, setMusicEnabled } from './ui/sound';
+import { MOTIVATION, pickLine } from './game/motivation';
 
 /* =========================================================
    WITLO · a 60-second sport for your brain · v5
@@ -79,7 +80,7 @@ const DEFAULT_PROFILE = {
   freezes: 0, gamesSinceAd: 0, remindersOn: false, remindersAsked: false,
   xp: 0, missions: null, ach: {}, pb: {}, winStreak: 0, lossStreak: 0, lastRival: null,
   sessions: 0, lastAdAt: 0, askedAt: 0, rated: false, feedback: [], today: null, rushBest: {}, survivalBest: 0, doubles: null,
-  sound: true, recent: [], sinceChallenge: 0, frame: null, frames: {},
+  sound: true, music: true, motivationOn: true, recent: [], sinceChallenge: 0, frame: null, frames: {},
 };
 // Never trust stored data blindly: fall back to defaults on anything malformed
 function sanitizeProfile(raw) {
@@ -94,7 +95,7 @@ function sanitizeProfile(raw) {
   if (!Array.isArray(p.feedback)) p.feedback = [];
   if (p.missions && !Array.isArray(p.missions)) p.missions = null;
   if (p.theme !== 'dark' && p.theme !== 'light') p.theme = null;
-  p.sound = p.sound !== false;
+  p.sound = p.sound !== false; p.music = p.music !== false; p.motivationOn = p.motivationOn !== false;
   p.recent = Array.isArray(p.recent) ? p.recent.filter((x) => x && typeof x.me === 'number').slice(-8) : [];
   p.sinceChallenge = Math.max(0, num(p.sinceChallenge, 0));
   if (!p.frames || typeof p.frames !== 'object' || Array.isArray(p.frames)) p.frames = {};
@@ -141,6 +142,42 @@ function planDuel(P) {
     challenge: { factor: 1.13, dAdj: 70, rating: 70, label: 'Tough rival' },
   }[type];
   return { type, ...T, target: Math.max(3, expected * T.factor) };
+}
+
+/* ---------------- A tiny sparkle burst on a right answer ---------------- */
+const BURST = [0, 45, 90, 135, 180, 225, 270, 315];
+function Burst({ color }) {
+  const a = useRef(new Animated.Value(0)).current;
+  useEffect(() => { Animated.timing(a, { toValue: 1, duration: 520, easing: Easing.out(Easing.cubic), useNativeDriver: true }).start(); }, [a]);
+  return (
+    <View pointerEvents="none" style={{ position: 'absolute', left: '50%', top: '50%' }}>
+      {BURST.map((deg, i) => {
+        const r = (deg * Math.PI) / 180; const dist = i % 2 ? 46 : 64;
+        return <Animated.View key={deg} style={{ position: 'absolute', width: i % 2 ? 6 : 8, height: i % 2 ? 6 : 8, borderRadius: 4, backgroundColor: i % 3 ? color : '#FFD54A', opacity: a.interpolate({ inputRange: [0, 0.2, 1], outputRange: [0, 1, 0] }), transform: [{ translateX: a.interpolate({ inputRange: [0, 1], outputRange: [0, Math.cos(r) * dist] }) }, { translateY: a.interpolate({ inputRange: [0, 1], outputRange: [0, Math.sin(r) * dist * 0.6] }) }, { scale: a.interpolate({ inputRange: [0, 0.3, 1], outputRange: [0.4, 1.2, 0.6] }) }] }} />;
+      })}
+    </View>
+  );
+}
+
+/* ---------------- Wit's occasional motivation bubble ---------------- */
+function QuoteBubble({ bubble, onDone, s, C, bottom }) {
+  const a = useRef(new Animated.Value(0)).current;
+  useEffect(() => {
+    if (!bubble) return undefined;
+    a.setValue(0);
+    Animated.spring(a, { toValue: 1, useNativeDriver: true, speed: 14, bounciness: 7 }).start();
+    const t = setTimeout(() => Animated.timing(a, { toValue: 0, duration: 260, easing: EASE, useNativeDriver: true }).start(() => onDone()), 4600);
+    return () => clearTimeout(t);
+  }, [bubble && bubble.key]); // eslint-disable-line react-hooks/exhaustive-deps
+  if (!bubble) return null;
+  return (
+    <Animated.View style={[s.quote, { bottom, transform: [{ translateY: a.interpolate({ inputRange: [0, 1], outputRange: [140, 0] }) }, { scale: a.interpolate({ inputRange: [0, 1], outputRange: [0.92, 1] }) }] }]}>
+      <Pressable onPress={() => Animated.timing(a, { toValue: 0, duration: 200, useNativeDriver: true }).start(() => onDone())} style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }} accessibilityRole="button" accessibilityLabel="Dismiss">
+        <WitArt mood={bubble.mood || 'happy'} size={46} />
+        <Text style={[s.quoteText, { flex: 1 }]}>{bubble.text}</Text>
+      </Pressable>
+    </Animated.View>
+  );
 }
 
 /* ---------------- One reviewed mistake (tap to see how) ---------------- */
@@ -203,9 +240,9 @@ function Clock({ gRef, onTimeUp, s, C }) {
 }
 
 /* ---------------- Smooth entrance for sheets and dialogs ---------------- */
-function Appear({ children, style, from = 28, fade = FADE }) {
+function Appear({ children, style, from = 28, fade = FADE, delay = 0 }) {
   const a = useRef(new Animated.Value(0)).current;
-  useEffect(() => { Animated.timing(a, { toValue: 1, duration: 280, easing: EASE, useNativeDriver: true }).start(); }, [a]);
+  useEffect(() => { Animated.timing(a, { toValue: 1, duration: 340, delay, easing: EASE, useNativeDriver: true }).start(); }, [a]);
   return <Animated.View style={[style, { opacity: fade ? a : 1, transform: [{ translateY: a.interpolate({ inputRange: [0, 1], outputRange: [from, 0] }) }] }]}>{children}</Animated.View>;
 }
 function Backdrop({ children, style, onPress }) {
@@ -322,7 +359,8 @@ function App() {
   const s = useMemo(() => makeStyles(C), [C]);
   const contentW = Math.min(480, winW) - 32;
 
-  const [screen, setScreen] = useState('home'); // home | train | board | me | longpick | rushpick | match | game | result | setup
+  const [screen, setScreen] = useState('home');
+  const screenRef = useRef('home'); screenRef.current = screen; // home | train | board | me | longpick | rushpick | match | game | result | setup
   const [quitAsk, setQuitAsk] = useState(false);
   const [agree, setAgree] = useState(false);
   const [draftName, setDraftName] = useState('');
@@ -340,6 +378,15 @@ function App() {
   const [ask, setAsk] = useState(null); // rating / feedback prompt: 'rate' | 'feedback' | 'thanks'
   const [framePick, setFramePick] = useState(null); // frame being previewed in the collection: 'r:Gold' | 'c:inferno'
   const visitRef = useRef(0); // counts page visits so frame reveals play once per visit, never on re-renders
+  const [bubble, setBubble] = useState(null);
+  const bubbleRef = useRef({ last: 0, count: 0 });
+  // Wit's motivation bubble: sometimes, never often (at most 4 a session, 2.5 min apart)
+  const maybeBubble = (kind, chance, delay = 900, mood = 'happy') => {
+    const b = bubbleRef.current; const now = Date.now();
+    if (b.count >= 4 || now - b.last < 150000 || Math.random() > chance) return;
+    b.last = now; b.count += 1;
+    later(() => { setBubble({ text: pickLine(MOTIVATION[kind]), key: Date.now(), mood }); playSound('pop'); haptic('soft'); }, delay);
+  };
   const [fbText, setFbText] = useState('');
   const [doubleState, setDoubleState] = useState('');
   const [hint, setHint] = useState(false);
@@ -371,6 +418,7 @@ function App() {
   // Smooth page transitions + reset the scroll prompt for the new page
   useEffect(() => {
     visitRef.current += 1; if (screen !== 'frames') setFramePick(null);
+    if (screen === 'board') maybeBubble('board', 0.35, 1200, 'happy');
     pageAnim.setValue(0);
     Animated.timing(pageAnim, { toValue: 1, duration: 300, easing: EASE, useNativeDriver: true }).start();
     if (scrollRef.current && scrollRef.current.scrollTo) scrollRef.current.scrollTo({ y: 0, animated: false });
@@ -421,7 +469,7 @@ function App() {
         let p = sanitizeProfile(null);
         try { if (v) p = sanitizeProfile(JSON.parse(v)); } catch (e) { p = sanitizeProfile(null); }
         p = { ...p, sessions: (p.sessions || 0) + 1 };
-        setSoundEnabled(p.sound !== false);
+        setSoundEnabled(p.sound !== false); setMusicEnabled(p.music !== false);
         profileRef.current = p; setProfile(p); scoreAnim.setValue(p.score); setShownScore(p.score); barAnim.setValue(tierProgress(p.score));
         AsyncStorage.setItem(STORE_KEY, JSON.stringify(p)).catch(() => {});
         try { if (brain) histRef.current = new QHistory(JSON.parse(brain)); } catch (e) { histRef.current = new QHistory(); }
@@ -433,6 +481,13 @@ function App() {
     AsyncStorage.removeItem('witlo_seen_v1').catch(() => {});
   }, []);
   useEffect(() => { if (loaded && fontsLoaded) SplashScreen.hideAsync().catch(() => {}); }, [loaded, fontsLoaded]);
+  // Calm music on menus only: never during matchmaking or a game, paused when the app is in the background
+  const appActive = useRef(true);
+  useEffect(() => { setMusic(loaded && !splash && appActive.current && screen !== 'game' && screen !== 'match' && profile.music !== false); }, [screen, loaded, splash, profile.music]);
+  useEffect(() => {
+    const sub = AppState.addEventListener('change', (st) => { appActive.current = st === 'active'; setMusic(appActive.current && screenRef.current !== 'game' && screenRef.current !== 'match' && profileRef.current.music !== false); });
+    return () => sub.remove();
+  }, []);
   useEffect(() => onAdsChange(() => setAdTick((t) => t + 1)), []);
   useEffect(() => { const id = scoreAnim.addListener(({ value }) => setShownScore(Math.round(value))); return () => scoreAnim.removeListener(id); }, [scoreAnim]);
 
@@ -444,7 +499,7 @@ function App() {
     return best ? CATS[best].name : null;
   }
   function reschedule(P) {
-    try { if (P.remindersOn) scheduleReminders({ name: P.name, streak: liveStreak(P), playedToday: P.last === dayKey(), pb: P.pb && P.pb.blitz, improving: improvingCat() }); } catch (e) { /* optional */ }
+    try { if (P.remindersOn) scheduleReminders({ name: P.name, streak: liveStreak(P), playedToday: P.last === dayKey(), pb: P.pb && P.pb.blitz, improving: improvingCat(), motivation: P.motivationOn !== false }); } catch (e) { /* optional */ }
   }
 
   // Rating / feedback: after a win or every 5th session, at most once a week, never mid-game
@@ -705,6 +760,7 @@ function App() {
       if (i >= 0) { const sh = q.anims[i].shake; Animated.sequence([10, -10, 7, -7, 3, 0].map((v) => Animated.timing(sh, { toValue: v, duration: 45, useNativeDriver: true }))).start(); }
       if (i < 0) line = "Time's up!"; else if (prevCombo >= 3) line = pick(WIT.broke); else if (Math.random() < 0.35) line = pick(WIT.wrong);
     }
+    if (!line && g.kind === 'blitz' && !g.cheered && g.rv - g.me >= 3 && g.endAt && g.endAt - Date.now() < 40000 && g.endAt - Date.now() > 12000 && Math.random() < 0.6) { g.cheered = true; line = pickLine(MOTIVATION.comeback); mood = 'think'; }
     if (line) g.wit = { text: line, key: Date.now(), mood };
     if (g.kind === 'daily') g.marks.push(ok ? '🟩' : '🟥');
     if (!ok && g.mistakes.length < 12) g.mistakes.push({ tid: q.tid, cat: q.cat, sub: q.sub, prompt: q.prompt, emph: q.optKind ? null : q.emph, passage: q.passage, ans: q.optKind ? null : q.ans, mine: i >= 0 && !q.optKind ? q.opts[i] : null, why: q.why, steps: q.steps, tip: q.tip, vis: !!q.vis });
@@ -850,7 +906,10 @@ function App() {
     trophyAnim.setValue(0); xpAnim.setValue(levelOf(xpFrom).frac); setScreen('result');
     const big = out === 1 || tierUp || g.masteredNow.length > 0 || (g.kind === 'daily' && g.correct === 5) || r.levelUp || achs.length || pbs.length;
     later(() => playSound(out === 1 || tierUp ? 'win' : g.kind === 'blitz' && !forfeit && out === 0 ? 'lose' : big ? 'reward' : 'correct'), 250);
-    if (big) { setConfettiKey((k) => k + 1); haptic('success'); later(() => haptic('heavy'), 180); Animated.spring(trophyAnim, { toValue: 1, friction: 4, tension: 60, useNativeDriver: true }).start(); }
+    if (big) { setConfettiKey((k) => k + 1); hapticPattern([['success', 0], ['heavy', 180], ['light', 420]]); Animated.spring(trophyAnim, { toValue: 1, friction: 4, tension: 60, useNativeDriver: true }).start(); }
+    if (r.levelUp) later(() => playSound('level'), 1300);
+    if (g.kind === 'blitz' && !forfeit && out === 0) maybeBubble('losing', (P.lossStreak || 0) >= 2 ? 0.9 : 0.55, 2200, 'think');
+    else if (g.answered >= 4) maybeBubble('after', 0.18, 2600, 'proud');
     else Animated.timing(trophyAnim, { toValue: 1, duration: 300, useNativeDriver: true }).start();
     later(() => Animated.timing(xpAnim, { toValue: r.levelUp ? 1 : lvAfter.frac, duration: 900, easing: Easing.out(Easing.cubic), useNativeDriver: false }).start(), 500);
   }
@@ -1442,12 +1501,22 @@ function App() {
           <Text style={s.settingText}>{profile.sound === false ? '🔇 Sound effects off' : '🔊 Sound effects on'}</Text>
           <Text style={[s.small, { color: C.accent }]}>{profile.sound === false ? 'Turn on' : 'Turn off'}</Text>
         </Bouncy>
+        <Bouncy onPress={() => { const on = profile.music === false; setMusicEnabled(on); saveProfile({ ...profileRef.current, music: on }); }} style={[s.card, s.settingRow]} accessibilityLabel="Music">
+          <Text style={s.settingText}>{profile.music === false ? '🎵 Music off' : '🎵 Music on'}</Text>
+          <Text style={[s.small, { color: C.accent }]}>{profile.music === false ? 'Turn on' : 'Turn off'}</Text>
+        </Bouncy>
         {remindersSupported() && (
           <Bouncy onPress={() => { if (profile.remindersOn) { saveProfile({ ...profileRef.current, remindersOn: false }); cancelReminders(); } else turnOnReminders(); }} style={[s.card, s.settingRow]}>
             <Text style={s.settingText}>{profile.remindersOn ? '🔔 Daily reminders on' : '🔕 Daily reminders off'}</Text>
             <Text style={[s.small, { color: C.accent }]}>{profile.remindersOn ? 'Turn off' : 'Turn on'}</Text>
           </Bouncy>
         )}
+        {remindersSupported() && profile.remindersOn ? (
+          <Bouncy onPress={() => { const p = { ...profileRef.current, motivationOn: profile.motivationOn === false }; saveProfile(p); reschedule(p); }} style={[s.card, s.settingRow]} accessibilityLabel="Daily motivation">
+            <Text style={s.settingText}>{profile.motivationOn === false ? '🌤️ Morning motivation off' : '🌤️ Morning motivation on'}</Text>
+            <Text style={[s.small, { color: C.accent }]}>{profile.motivationOn === false ? 'Turn on' : 'Turn off'}</Text>
+          </Bouncy>
+        ) : null}
         <Bouncy onPress={() => setAsk('feedback')} style={[s.card, s.settingRow]}>
           <Text style={s.settingText}>💬 Send feedback</Text>
           <Text style={[s.small, { color: C.accent }]}>Tell us</Text>
@@ -1477,6 +1546,7 @@ function App() {
       return (
         <Pressable key={`${g.qi}-${i}`} testID={`opt-${i}`} onPressIn={() => answer(i, q)} onPress={() => answer(i, q)} style={{ flex: 1 }} accessibilityRole="button" accessibilityLabel={String(v)}>
           <Animated.View style={[s.opt, right && s.optRight, wrong && s.optWrong, q.optKind && { justifyContent: 'center', minHeight: 84 }, { transform: [{ scale: q.anims[i].scale }, { translateX: q.anims[i].shake }] }]}>
+            {right && g.feedback.ok && g.picked === i ? <Burst key={`b${g.qi}`} color={C.good} /> : null}
             <Text style={[s.optLetter, right && { color: C.good }, wrong && { color: C.bad }]}>{right ? '✓' : wrong ? '✕' : 'ABCDE'[i]}</Text>
             {q.optKind === 'shape' ? <View style={{ flex: 1, alignItems: 'center' }}><Figure spec={v} size={60} color={C.ink} soft={C.card} /></View>
               : q.optKind === 'fx' ? <View style={{ flex: 1, alignItems: 'center' }}><FxText value={v} style={[s.optText, { textAlign: 'center', flex: 0 }]} /></View>
@@ -1615,9 +1685,9 @@ function App() {
           <Text style={s.cta}>Think you're sharper? Beat me on Witlo 🦉</Text>
         </View>
 
-        <Wit s={s} mood={r.mood} text={r.wit} />
-        <Bouncy onPress={again.go} style={s.btn}><Glow /><Text style={s.btnText}>{again.label}</Text></Bouncy>
-        <Bouncy onPress={goHomeAfterGame} style={s.btnGhost} accessibilityLabel="Go home"><Text style={s.btnGhostText}>🏠 Home</Text></Bouncy>
+        <Appear delay={180} from={18}><Wit s={s} mood={r.mood} text={r.wit} /></Appear>
+        <Appear delay={260} from={18}><Bouncy onPress={again.go} style={s.btn}><Glow /><Text style={s.btnText}>{again.label}</Text></Bouncy></Appear>
+        <Appear delay={330} from={18}><Bouncy onPress={goHomeAfterGame} style={s.btnGhost} accessibilityLabel="Go home"><Text style={s.btnGhostText}>🏠 Home</Text></Bouncy></Appear>
         <View style={{ flexDirection: 'row', gap: 10 }}>
           {r.kind === 'blitz' ? <Bouncy onPress={() => startGame('blitz')} style={[s.btnGhost, { flex: 1 }]}><Text style={s.btnGhostText} numberOfLines={1}>🎲 New rival</Text></Bouncy> : null}
           {dailyLeft ? <Bouncy onPress={() => startGame('daily')} style={[s.btnGhost, { flex: 1 }]}><Text style={s.btnGhostText} numberOfLines={1}>📅 Daily 5</Text></Bouncy> : null}
@@ -1775,6 +1845,7 @@ function App() {
         </Backdrop>
       )}
       <Confetti fire={confettiKey} />
+      <QuoteBubble bubble={bubble} onDone={() => setBubble(null)} s={s} C={C} bottom={(withTabs ? 96 : 30) + insets.bottom} />
       {SplashLayer}
     </View>
   );

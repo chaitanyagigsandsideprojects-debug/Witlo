@@ -125,6 +125,8 @@ export function makeStyles(C) {
     frameTile: { width: '31.6%', alignItems: 'center', gap: 4, paddingVertical: 14, paddingHorizontal: 6, borderRadius: 20, backgroundColor: C.card, borderWidth: 2, borderColor: 'transparent', ...edge },
     frameName: { fontFamily: F.b, fontSize: 13, color: C.ink, marginTop: 8 },
     frameStatus: { fontFamily: F.m, fontSize: 11.5, color: C.muted },
+    quote: { position: 'absolute', left: 16, right: 16, backgroundColor: C.card, borderRadius: 22, paddingVertical: 10, paddingHorizontal: 14, borderWidth: 1, borderColor: C.line, shadowColor: '#000', shadowOpacity: 0.16, shadowRadius: 18, shadowOffset: { width: 0, height: 8 }, elevation: 14 },
+    quoteText: { fontFamily: F.b, fontSize: 15, lineHeight: 21, color: C.ink },
     mistake: { borderRadius: 18, padding: 14, gap: 6, backgroundColor: C.bg, borderWidth: 1, borderColor: C.line },
     mistakeQ: { fontFamily: F.b, fontSize: 15, lineHeight: 21, color: C.ink },
     fbTitle: { fontFamily: F.x, fontSize: 18, lineHeight: 24 },
