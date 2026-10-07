@@ -3,6 +3,7 @@ import { View, Pressable, StyleSheet, Animated, Easing, Dimensions, Image } from
 import { Text } from './emoji';
 import * as Haptics from 'expo-haptics';
 import { CONFETTI } from './theme';
+import { playSound } from './sound';
 
 export const AVATARS = [
   { e: '🐯', bg: '#FFE1C7' }, { e: '🦚', bg: '#D5F2EA' }, { e: '🐘', bg: '#E3E4F7' }, { e: '🦁', bg: '#FFEBC2' },
@@ -31,22 +32,48 @@ export const haptic = (kind) => {
   } catch (e) { /* no haptics on this device */ }
 };
 
+// A button is drawn in three layers: the press area (size/position), a shadow layer that scales on press,
+// and a content layer that clips rounded corners. Keeping shadow and clipping on separate layers matters:
+// on some Android phones one view that clips, casts a shadow and animates can stop drawing its contents.
+const PRESS_KEYS = ['flex', 'flexGrow', 'flexShrink', 'flexBasis', 'alignSelf', 'width', 'minWidth', 'maxWidth', 'position', 'top', 'left', 'right', 'bottom', 'zIndex',
+  'margin', 'marginTop', 'marginBottom', 'marginLeft', 'marginRight', 'marginHorizontal', 'marginVertical'];
+const SHADOW_KEYS = ['shadowColor', 'shadowOpacity', 'shadowRadius', 'shadowOffset', 'elevation', 'height', 'minHeight', 'maxHeight'];
+const RADII = ['borderRadius', 'borderTopLeftRadius', 'borderTopRightRadius', 'borderBottomLeftRadius', 'borderBottomRightRadius'];
+function splitStyle(style) {
+  const flat = StyleSheet.flatten(style) || {};
+  const press = {}; const shade = {}; const inner = {};
+  Object.keys(flat).forEach((k) => {
+    if (PRESS_KEYS.includes(k)) press[k] = flat[k];
+    else if (SHADOW_KEYS.includes(k)) shade[k] = flat[k];
+    else inner[k] = flat[k];
+  });
+  RADII.forEach((k) => { if (flat[k] != null) shade[k] = flat[k]; });
+  // Android only draws a shadow for a view with a background, so the shadow layer gets the same colour.
+  if (shade.elevation && flat.backgroundColor) shade.backgroundColor = flat.backgroundColor;
+  if (press.width != null) shade.width = '100%';
+  if (press.flex != null || press.flexGrow != null) shade.flexGrow = 1;
+  if (shade.height != null || shade.minHeight != null || shade.flexGrow) inner.flexGrow = 1;
+  return { press, shade, inner };
+}
+
 // Every tappable thing: a soft press-in, then a gentle settle (no jarring bounce)
-export function Bouncy({ onPress, onPressIn, style, children, disabled, instant, haptics = true, accessibilityLabel }) {
+export function Bouncy({ onPress, onPressIn, style, children, disabled, instant, haptics = true, sound = 'tap', accessibilityLabel }) {
   const scale = useRef(new Animated.Value(1)).current;
   const pressIn = () => {
     if (disabled) return;
     if (haptics) haptic('tap');
+    if (sound) playSound(sound);
     Animated.timing(scale, { toValue: 0.965, duration: 110, easing: Easing.out(Easing.quad), useNativeDriver: true }).start();
     if (instant && onPress) onPress();
     if (onPressIn) onPressIn();
   };
   const pressOut = () => Animated.spring(scale, { toValue: 1, useNativeDriver: true, speed: 14, bounciness: 5 }).start();
-  const flat = StyleSheet.flatten(style) || {};
-  const outer = flat.flex != null ? { flex: flat.flex } : flat.width && typeof flat.width === 'string' ? { width: flat.width, flexGrow: flat.flexGrow } : undefined;
+  const { press, shade, inner } = splitStyle(style);
   return (
-    <Pressable style={outer} onPressIn={pressIn} onPressOut={pressOut} onPress={instant || disabled ? undefined : onPress} disabled={disabled} accessibilityRole="button" accessibilityLabel={accessibilityLabel}>
-      <Animated.View style={[style, outer && outer.width ? { width: '100%' } : null, { transform: [{ scale }] }, disabled && { opacity: 0.45 }]}>{children}</Animated.View>
+    <Pressable style={press} onPressIn={pressIn} onPressOut={pressOut} onPress={instant || disabled ? undefined : onPress} disabled={disabled} accessibilityRole="button" accessibilityLabel={accessibilityLabel}>
+      <Animated.View style={[shade, { transform: [{ scale }] }, disabled && { opacity: 0.45 }]}>
+        <View style={inner}>{children}</View>
+      </Animated.View>
     </Pressable>
   );
 }

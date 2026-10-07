@@ -7,9 +7,12 @@ import logic from './logic';
 import di from './di';
 import verbal from './verbal';
 import visual from './visual';
+import { TIPS } from './tips';
 
 export { CATS, CAT_KEYS, LEVELS, seeded, hash };
 export const TEMPLATES = [...quant, ...logic, ...di, ...verbal, ...visual];
+// every template carries its topic's exam shortcut (shown in solutions and in the mistake review)
+TEMPLATES.forEach((T) => { if (!T.tip && TIPS[T.sub]) T.tip = TIPS[T.sub]; });
 export const BY_ID = Object.fromEntries(TEMPLATES.map((t) => [t.id, t]));
 export const SUBS = [...new Set(TEMPLATES.map((t) => `${t.cat}|${t.sub}`))].map((x) => { const [cat, sub] = x.split('|'); return { cat, sub }; });
 
@@ -47,10 +50,12 @@ export function nextQuestion(ctx) {
   for (let attempt = 0; attempt < 24; attempt++) {
     const cat = ctx.cat || pickWeighted(rand, ctx.mix || MIX[ctx.mode] || MIX.blitz);
     const wantL = levelOf(diffOf(cat));
-    let pool = TEMPLATES.filter((T) => T.cat === cat && (!ctx.sub || T.sub === ctx.sub) && eligible(T, ctx.mode, wantL));
-    if (!pool.length) pool = TEMPLATES.filter((T) => T.cat === cat && (!ctx.sub || T.sub === ctx.sub));
+    // ctx.tids: practise exactly these question types again (fresh numbers), e.g. after a game's mistakes
+    const want = (T) => (ctx.tids ? ctx.tids.includes(T.id) : T.cat === cat && (!ctx.sub || T.sub === ctx.sub));
+    let pool = TEMPLATES.filter((T) => want(T) && eligible(T, ctx.mode, wantL));
+    if (!pool.length) pool = TEMPLATES.filter(want);
     if (!pool.length) continue;
-    const fresh = pool.filter((T) => !recent.slice(-4).includes(T.id)); const T = k.pick(fresh.length ? fresh : pool);
+    const fresh = pool.filter((T) => !recent.slice(ctx.tids ? -1 : -4).includes(T.id)); const T = k.pick(fresh.length ? fresh : pool);
     const L = clamp(ctx.mode === 'long' ? Math.max(wantL, 3) : wantL, T.lv[0], T.lv[1]);
     const q = make(T, k, L, accept(attempt < 16), 12);
     if (q) return q;

@@ -1,7 +1,7 @@
 import React, { useEffect, useMemo, useReducer, useRef, useState } from 'react';
 import {
   View, Pressable, StyleSheet, StatusBar, ScrollView, TextInput, Share, Linking,
-  useColorScheme, useWindowDimensions, Animated, Easing, KeyboardAvoidingView, Platform,
+  useColorScheme, useWindowDimensions, Animated, Easing, KeyboardAvoidingView, Platform, BackHandler,
 } from 'react-native';
 import { SafeAreaProvider, useSafeAreaInsets } from 'react-native-safe-area-context';
 import AsyncStorage from '@react-native-async-storage/async-storage';
@@ -14,13 +14,15 @@ import { initAds, showInterstitial, showRewarded, rewardedReady, adsSupported, o
 import { askReminderPermission, scheduleReminders, cancelReminders, remindersSupported } from './reminders';
 import { CATS, CAT_KEYS, LEVELS, seeded, nextQuestion, dailyFive, updateSkill } from './engine';
 import { QHistory } from './engine/history';
-import { tierOf, tierProgress, levelOf, missionsFor, advanceMissions, ACHIEVEMENTS, checkAchievements, xpFor, WIT } from './game/progress';
+import { TIERS, tierOf, tierProgress, levelOf, missionsFor, advanceMissions, ACHIEVEMENTS, checkAchievements, xpFor, WIT } from './game/progress';
 import { INFO } from './game/info';
 import { checkUsername } from './game/names';
 import { PALETTE, F, makeStyles } from './ui/theme';
 import { Bouncy, Avatar, Wit, WitArt, WitPop, Confetti, Stat, haptic, AVATARS, CHARACTERS } from './ui/parts';
 import { QuestionVisual, Figure, FxText } from './ui/visuals';
 import { Text, Icon } from './ui/emoji';
+import { RankedAvatar, RANK_FRAMES, COSMETIC_FRAMES, COSMETIC_BY_ID, frameOwned, unlockProgress } from './ui/frames';
+import { initSounds, playSound, setSoundEnabled } from './ui/sound';
 
 /* =========================================================
    WITLO · a 60-second sport for your brain · v5
@@ -59,6 +61,9 @@ function aiBoard(cat) {
   const ci = cat ? CAT_KEYS.indexOf(cat) + 1 : 0; const r = seeded(daySeed() * 7 + 3 + ci * 101);
   return RIVALS.slice(0, 12).map(([name, av]) => ({ name, av, score: cat ? 3 + Math.floor(r() * 18) : 6 + Math.floor(r() * 11) })).sort((a, b) => b.score - a.score);
 }
+// AI challengers get a steady rank from their name (they are disclosed as AI everywhere)
+function aiRating(name) { let h = 7; for (let i = 0; i < name.length; i++) h = (h * 31 + name.charCodeAt(i)) % 100003; return 1000 + (h % 860); }
+const rankName = (score) => tierOf(score).tier.name;
 function greeting(name) {
   const h = new Date().getHours();
   const hi = h < 12 ? 'Good morning' : h < 17 ? 'Good afternoon' : 'Good evening';
@@ -71,6 +76,7 @@ const DEFAULT_PROFILE = {
   freezes: 0, gamesSinceAd: 0, remindersOn: false, remindersAsked: false,
   xp: 0, missions: null, ach: {}, pb: {}, winStreak: 0, lossStreak: 0, lastRival: null,
   sessions: 0, lastAdAt: 0, askedAt: 0, rated: false, feedback: [], today: null, rushBest: {}, survivalBest: 0, doubles: null,
+  sound: true, recent: [], sinceChallenge: 0, frame: null, frames: {},
 };
 // Never trust stored data blindly: fall back to defaults on anything malformed
 function sanitizeProfile(raw) {
@@ -85,6 +91,11 @@ function sanitizeProfile(raw) {
   if (!Array.isArray(p.feedback)) p.feedback = [];
   if (p.missions && !Array.isArray(p.missions)) p.missions = null;
   if (p.theme !== 'dark' && p.theme !== 'light') p.theme = null;
+  p.sound = p.sound !== false;
+  p.recent = Array.isArray(p.recent) ? p.recent.filter((x) => x && typeof x.me === 'number').slice(-8) : [];
+  p.sinceChallenge = Math.max(0, num(p.sinceChallenge, 0));
+  if (!p.frames || typeof p.frames !== 'object' || Array.isArray(p.frames)) p.frames = {};
+  if (typeof p.frame !== 'string') p.frame = null;
   return p;
 }
 const MAX_FREEZES = 2;
@@ -109,6 +120,48 @@ const LONG_MODES = { 5: { n: 5, mins: 10, title: 'Long 5', sub: '5 deep question
 const MODE_LABEL = { blitz: 'BLITZ DUEL', daily: 'DAILY 5', long: 'LONG MODE', train: 'TRAINING', rush: 'CATEGORY RUSH', survival: 'SURVIVAL' };
 const SURVIVAL_SECS = 20;
 
+/* Duel pacing. Rivals are tuned to YOUR recent Blitz scores, so a duel is usually close.
+   After 2 losses in a row: a confidence game you should win. After 1 loss: a slightly easier rival.
+   Every 4–5 games (when you're doing fine): a clearly labelled tough rival, a real challenge. */
+function planDuel(P) {
+  const recent = (P.recent || []).slice(-5);
+  const expected = recent.length ? Math.max(5, recent.reduce((a, x) => a + x.me, 0) / recent.length) : 7;
+  const loss = P.lossStreak || 0; const wins = P.winStreak || 0;
+  let type = 'even';
+  if ((P.played || 0) < 2 || loss >= 2) type = 'comeback';
+  else if (loss === 1) type = 'easy';
+  else if ((P.sinceChallenge || 0) >= 4 || wins >= 3) type = 'challenge';
+  const T = {
+    comeback: { factor: 0.68, dAdj: -130, rating: -60, label: null },
+    easy: { factor: 0.85, dAdj: -60, rating: -25, label: null },
+    even: { factor: 0.98, dAdj: 0, rating: 0, label: null },
+    challenge: { factor: 1.13, dAdj: 70, rating: 70, label: 'Tough rival' },
+  }[type];
+  return { type, ...T, target: Math.max(3, expected * T.factor) };
+}
+
+/* ---------------- One reviewed mistake (tap to see how) ---------------- */
+function MistakeRow({ m, s, C }) {
+  const [open, setOpen] = useState(false);
+  return (
+    <Pressable onPress={() => setOpen((o) => !o)} style={s.mistake} accessibilityRole="button" accessibilityLabel="Show how to solve it">
+      <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+        <Text style={[s.typeChip, { alignSelf: 'flex-start' }]} numberOfLines={1}>{CATS[m.cat].icon} {m.sub}</Text>
+        <View style={{ flex: 1 }} /><Text style={[s.small, { color: C.accent }]}>{open ? 'Hide' : 'How?'}</Text>
+      </View>
+      <Text style={s.mistakeQ} numberOfLines={open ? 6 : 2}>{m.prompt}{m.emph ? ` ${m.emph.replace(/\n/g, '  ')}` : ''}</Text>
+      {m.ans ? <Text style={s.small}>{m.mine ? <Text style={{ color: C.bad }}>You: {m.mine}  ·  </Text> : null}<Text style={{ color: C.good, fontFamily: F.x }}>Answer: {m.ans}</Text></Text> : null}
+      {open ? (
+        <View style={{ gap: 6 }}>
+          <Text style={s.fbText}>{m.why}</Text>
+          {m.steps ? <Text style={s.fbText}>{m.steps}</Text> : null}
+          {m.tip ? <Text style={s.fbText}><Text style={{ fontFamily: F.x }}>💡 Exam shortcut: </Text>{m.tip}</Text> : null}
+        </View>
+      ) : null}
+    </Pressable>
+  );
+}
+
 /* ---------------- Clock (re-renders itself only) ---------------- */
 function Clock({ gRef, onTimeUp, s, C }) {
   const [, tick] = useReducer((x) => x + 1, 0);
@@ -120,7 +173,7 @@ function Clock({ gRef, onTimeUp, s, C }) {
       if (g.endAt) {
         const left = Math.ceil((g.endAt - Date.now()) / 1000);
         if (left <= 5 && left !== lastSec.current) { // strong final countdown
-          lastSec.current = left; haptic('light'); pulse.setValue(1.3);
+          lastSec.current = left; haptic('light'); playSound('tick'); pulse.setValue(1.3);
           Animated.spring(pulse, { toValue: 1, useNativeDriver: true, speed: 28, bounciness: 12 }).start();
         }
       }
@@ -275,6 +328,8 @@ function App() {
   const [boardCat, setBoardCat] = useState(null);
   const [match, setMatch] = useState(null);
   const [ask, setAsk] = useState(null); // rating / feedback prompt: 'rate' | 'feedback' | 'thanks'
+  const [framePick, setFramePick] = useState(null); // frame being previewed in the collection: 'r:Gold' | 'c:inferno'
+  const visitRef = useRef(0); // counts page visits so frame reveals play once per visit, never on re-renders
   const [fbText, setFbText] = useState('');
   const [doubleState, setDoubleState] = useState('');
   const [hint, setHint] = useState(false);
@@ -305,6 +360,7 @@ function App() {
 
   // Smooth page transitions + reset the scroll prompt for the new page
   useEffect(() => {
+    visitRef.current += 1; if (screen !== 'frames') setFramePick(null);
     pageAnim.setValue(0);
     Animated.timing(pageAnim, { toValue: 1, duration: 300, easing: EASE, useNativeDriver: true }).start();
     if (scrollRef.current && scrollRef.current.scrollTo) scrollRef.current.scrollTo({ y: 0, animated: false });
@@ -329,12 +385,33 @@ function App() {
     loop.start(); return () => loop.stop();
   }, [hint]);
 
+  // Android back button: never drops you out of a game by accident.
+  const backRef = useRef(() => false);
+  backRef.current = () => {
+    if (splash) return true;
+    if (info) { setInfo(null); return true; }
+    if (ask) { setAsk(null); return true; }
+    if (framePick) { setFramePick(null); return true; }
+    if (screen === 'game') { if (quitAsk) keepPlaying(); else askQuit(); return true; }
+    if (screen === 'match') { cancelMatch(); return true; }
+    if (screen === 'result') { goHomeAfterGame(); return true; }
+    if (screen === 'frames') { setScreen('me'); return true; }
+    if (screen === 'setup' && profileRef.current.name) { setScreen('me'); return true; }
+    if (screen !== 'home' && profileRef.current.terms && profileRef.current.name) { setScreen('home'); return true; }
+    return false; // on Home: let Android close the app as usual
+  };
+  useEffect(() => {
+    const sub = BackHandler.addEventListener('hardwareBackPress', () => backRef.current());
+    return () => sub.remove();
+  }, []);
+
   useEffect(() => {
     Promise.all([AsyncStorage.getItem(STORE_KEY), AsyncStorage.getItem(BRAIN_KEY)])
       .then(([v, brain]) => {
         let p = sanitizeProfile(null);
         try { if (v) p = sanitizeProfile(JSON.parse(v)); } catch (e) { p = sanitizeProfile(null); }
         p = { ...p, sessions: (p.sessions || 0) + 1 };
+        setSoundEnabled(p.sound !== false);
         profileRef.current = p; setProfile(p); scoreAnim.setValue(p.score); setShownScore(p.score); barAnim.setValue(tierProgress(p.score));
         AsyncStorage.setItem(STORE_KEY, JSON.stringify(p)).catch(() => {});
         try { if (brain) histRef.current = new QHistory(JSON.parse(brain)); } catch (e) { histRef.current = new QHistory(); }
@@ -342,6 +419,7 @@ function App() {
       .catch(() => {})
       .finally(() => { setLoaded(true); reschedule(profileRef.current); });
     try { initAds(); } catch (e) { /* ads are optional */ }
+    try { initSounds(); } catch (e) { /* sounds are optional */ }
     AsyncStorage.removeItem('witlo_seen_v1').catch(() => {});
   }, []);
   useEffect(() => { if (loaded && fontsLoaded) SplashScreen.hideAsync().catch(() => {}); }, [loaded, fontsLoaded]);
@@ -399,7 +477,7 @@ function App() {
     let ok = false;
     try { ok = adsSupported() ? await showRewarded() : __DEV__; } catch (e) { ok = false; }
     setFreezeBusy(false);
-    if (ok) { saveProfile({ ...profileRef.current, freezes: Math.min(MAX_FREEZES, (profileRef.current.freezes || 0) + 1) }); haptic('success'); setConfettiKey((k) => k + 1); }
+    if (ok) { saveProfile({ ...profileRef.current, freezes: Math.min(MAX_FREEZES, (profileRef.current.freezes || 0) + 1) }); haptic('success'); playSound('reward'); setConfettiKey((k) => k + 1); }
   }
   // Optional rewarded ad on the result screen: double this game's XP (max 5 a day)
   async function doubleXp() {
@@ -410,7 +488,7 @@ function App() {
     if (!ok) { setDoubleState('fail'); return; }
     const extra = g.result.xpGame; g.result.doubled = true; g.result.xpGain += extra; g.result.xpTo += extra;
     saveProfile({ ...profileRef.current, xp: (profileRef.current.xp || 0) + extra, doubles: { day: dayKey(), n: d + 1 } });
-    setDoubleState('done'); haptic('success'); setConfettiKey((k) => k + 1);
+    setDoubleState('done'); haptic('success'); playSound('reward'); setConfettiKey((k) => k + 1);
     Animated.timing(xpAnim, { toValue: levelOf(g.result.xpTo).frac, duration: 700, useNativeDriver: false }).start();
   }
   async function turnOnReminders() {
@@ -470,7 +548,7 @@ function App() {
       const ramp = g.kind === 'blitz' || g.kind === 'rush' ? (g.qi < 3 ? -110 : g.qi < 8 ? 0 : 90) : g.kind === 'long' ? 160 : g.kind === 'survival' ? -120 + Math.floor(g.correct / 5) * 90 : 0;
       const formAdj = g.kind === 'blitz' || g.kind === 'rush' ? clamp(g.correct - (g.answered - g.correct) * 2, -4, 6) * 12 : 0;
       q = nextQuestion({
-        mode: g.kind, history: H, cat: g.cat || null, sub: g.sub || null, recentTids: g.recentTids,
+        mode: g.kind, history: H, cat: g.tids ? null : g.cat || null, sub: g.tids ? null : g.sub || null, tids: g.tids, recentTids: g.recentTids,
         diff: (cat) => clamp(H.skill(cat) + ramp + g.dOffset + formAdj, 40, 980),
       });
     }
@@ -485,22 +563,37 @@ function App() {
 
   /* ---------------- Matchmaking: search → versus → 3·2·1 ---------------- */
   function findMatch(opts = {}) {
-    const P = profileRef.current; const losing = (P.lossStreak || 0) >= 2;
+    const P = profileRef.current; const plan = planDuel(P);
     let rival;
-    if (opts.rematch && P.lastRival) rival = P.lastRival;
-    else { const [name, av] = pick(RIVALS); rival = { name, av, score: Math.max(1000, P.score + (losing ? -40 - Math.round(Math.random() * 40) : Math.round((Math.random() - 0.4) * 120))) }; }
-    const m = { phase: opts.rematch ? 'vs' : 'search', rival, count: 3, spin: 0, key: Date.now() };
+    const rematch = !!(opts.rematch && P.lastRival);
+    if (rematch) rival = { ...P.lastRival, plan };
+    else {
+      const last = opts.avoid || (P.lastRival && P.lastRival.name); const pool = RIVALS.filter(([n]) => n !== last);
+      const [name, av] = pick(pool);
+      rival = { name, av, plan, score: Math.max(1000, P.score + plan.rating + Math.round((Math.random() - 0.5) * 50)) };
+    }
+    const m = { phase: rematch ? 'ask' : 'search', rival, count: 3, spin: 0, key: Date.now(), note: opts.note || null };
     matchRef.current = m.key; setMatch(m); setScreen('match'); haptic('tap');
     const step = (fn, at) => later(() => { if (matchRef.current !== m.key) return; fn(); }, at);
     const upd = (patch) => setMatch((x) => (x && x.key === m.key ? { ...x, ...patch } : x));
     let t = 0;
-    if (!opts.rematch) {
+    if (rematch) {
+      // The rival has to accept. Most do; sometimes they're busy and you get a new rival instead.
+      const accepts = Math.random() < 0.85;
+      t += 1400 + Math.random() * 1600;
+      if (!accepts) {
+        step(() => { haptic('light'); upd({ phase: 'declined' }); }, t);
+        step(() => { if (matchRef.current !== m.key) return; findMatch({ avoid: rival.name, note: `${rival.name} couldn't play. Here's a new rival!` }); }, t + 1700);
+        return;
+      }
+      step(() => { haptic('heavy'); playSound('match'); upd({ phase: 'vs', note: `${rival.name} accepted your rematch! 🔥` }); }, t);
+    } else {
       for (let i = 1; i <= 8; i++) step(() => upd({ spin: i }), (t += 160));
-      step(() => { haptic('heavy'); upd({ phase: 'vs' }); }, (t += 220));
+      step(() => { haptic('heavy'); playSound('match'); upd({ phase: 'vs' }); }, (t += 220));
     }
-    step(() => upd({ phase: 'count', count: 3 }), (t += 1100));
-    [2, 1].forEach((n) => step(() => { haptic('light'); upd({ count: n }); }, (t += 520)));
-    step(() => { haptic('medium'); upd({ count: 0 }); }, (t += 520));
+    step(() => { playSound('tick'); upd({ phase: 'count', count: 3 }); }, (t += 1100));
+    [2, 1].forEach((n) => step(() => { haptic('light'); playSound('tick'); upd({ count: n }); }, (t += 520)));
+    step(() => { haptic('medium'); playSound('start'); upd({ count: 0 }); }, (t += 520));
     step(() => { if (matchRef.current !== m.key) return; matchRef.current = null; setMatch(null); startGame('blitz', { rival }); }, (t += 380));
   }
   function cancelMatch() { matchRef.current = null; timersRef.current.forEach(clearTimeout); timersRef.current = []; setMatch(null); setScreen('home'); }
@@ -510,20 +603,21 @@ function App() {
   function startGame(kind, opts = {}) {
     if (kind === 'blitz' && !opts.rival) { findMatch(opts); return; }
     const P = profileRef.current; const H = histRef.current; const now = Date.now();
-    const ti = tierOf(P.score).index;
-    const losing = (P.lossStreak || 0) >= 2; const winning = (P.winStreak || 0) >= 2;
     const rival = opts.rival || null;
+    const plan = (rival && rival.plan) || planDuel(P);
+    const rivalAcc = 0.86;
     const paced = kind === 'long' || kind === 'train';
     let cat = opts.cat || null; let sub = opts.sub || null;
     if (kind === 'train' && !cat) { cat = H.weakest(CAT_KEYS); sub = H.weakestSub(cat); }
     const g = {
-      kind, paced, cat, sub, total: kind === 'daily' ? 5 : kind === 'long' ? opts.n || 5 : kind === 'train' ? 8 : 0, lives: kind === 'survival' ? 3 : 0,
+      kind, paced, cat, sub, total: kind === 'daily' ? 5 : kind === 'long' ? opts.n || 5 : kind === 'train' ? (opts.tids ? Math.min(8, Math.max(4, opts.tids.length * 2)) : 8) : 0, lives: kind === 'survival' ? 3 : 0,
+      mistakes: [], tids: opts.tids || null, review: !!opts.review,
       qi: 0, me: 0, rv: 0, answered: 0, correct: 0, combo: 0, maxCombo: 0, times: [], marks: [], catStats: {}, fastCount: 0, under2: 0, fastest: null, points: 0,
       locked: false, running: true, paused: false, picked: null, feedback: null, recentTids: [], wit: null, reacts: [], lastReact: 0,
-      // after 2+ losses the next duel eases off; winning runs and higher ranks add heat
-      dOffset: kind === 'blitz' ? clamp((ti >= 3 ? 60 : 0) + (winning ? 60 : 0) - (losing ? 110 : 0), -120, 120) : 0,
-      rivalAcc: clamp(0.76 + 0.02 * ti + (winning ? 0.05 : 0) - (losing ? 0.14 : 0), 0.55, 0.9),
-      rivalGap: clamp(6.6 - 0.2 * ti - (winning ? 0.4 : 0) + (losing ? 1.3 : 0), 5, 8.5),
+      // the rival answers at a pace that lands near plan.target right answers in 60 s (see planDuel)
+      plan: kind === 'blitz' ? plan : null,
+      dOffset: kind === 'blitz' ? plan.dAdj : 0,
+      rivalAcc, rivalGap: clamp((60 * rivalAcc) / plan.target, 2.2, 14),
       rival: rival && rival.name, rivalAv: rival && rival.av, rivalScore: rival && rival.score, lossStreakBefore: P.lossStreak || 0,
       startAt: now, endAt: kind === 'blitz' || kind === 'rush' ? now + 60000 : null, target: kind === 'long' ? LONG_MODES[opts.n || 5].mins * 60 : null, qStart: now,
       dailyQs: kind === 'daily' ? dailyFive(daySeed()) : null,
@@ -551,14 +645,17 @@ function App() {
     const gap = (gameRef.current && gameRef.current.rivalGap) || 6.6;
     botRef.current = setTimeout(() => {
       const g = gameRef.current; if (!g || !g.running) return;
-      if (!g.paused && Math.random() < g.rivalAcc) {
+      // gentle rubber band: confidence games never run away from you; even duels stay within reach
+      const t = g.plan ? g.plan.type : 'even';
+      const lead = g.rv - g.me; const ease = (t === 'comeback' && lead >= 1) || (t === 'easy' && lead >= 3) || (t === 'even' && lead >= 4);
+      if (!g.paused && !ease && Math.random() < g.rivalAcc) {
         g.rv += 1; g.rivalPop.setValue(1.25);
         Animated.spring(g.rivalPop, { toValue: 1, useNativeDriver: true, bounciness: 14 }).start();
         if (g.rv - g.me === 3 && Math.random() < 0.6) rivalReact('😎', 300);
         force();
       }
       runRival();
-    }, (gap - 1.2 + Math.random() * 2.4) * 1000);
+    }, gap * (0.75 + Math.random() * 0.5) * 1000);
   }
 
   // onPressIn answers instantly on phones; onPress is the fallback for web. `shown` guards against
@@ -577,7 +674,7 @@ function App() {
       g.correct += 1; g.me += 1; g.combo += 1; cs.c += 1; g.maxCombo = Math.max(g.maxCombo, g.combo);
       if (secs < 3) g.fastCount += 1; if (secs < 2) g.under2 += 1; g.fastest = g.fastest == null ? secs : Math.min(g.fastest, secs);
       if (g.paced) g.points += 10 * q.level;
-      haptic(g.combo >= 3 ? 'medium' : 'success');
+      haptic(g.combo >= 3 ? 'medium' : 'success'); playSound(g.combo >= 3 ? 'combo' : 'correct');
       Animated.sequence([
         Animated.timing(q.anims[i].scale, { toValue: 1.04, duration: 120, easing: EASE, useNativeDriver: true }),
         Animated.spring(q.anims[i].scale, { toValue: 1, useNativeDriver: true, speed: 14, bounciness: 6 }),
@@ -589,12 +686,13 @@ function App() {
     } else {
       g.combo = 0; mood = 'think';
       if (g.kind === 'survival') g.lives -= 1;
-      haptic('error');
+      haptic('error'); playSound('wrong');
       if (i >= 0) { const sh = q.anims[i].shake; Animated.sequence([10, -10, 7, -7, 3, 0].map((v) => Animated.timing(sh, { toValue: v, duration: 45, useNativeDriver: true }))).start(); }
       if (i < 0) line = "Time's up!"; else if (prevCombo >= 3) line = pick(WIT.broke); else if (Math.random() < 0.35) line = pick(WIT.wrong);
     }
     if (line) g.wit = { text: line, key: Date.now(), mood };
     if (g.kind === 'daily') g.marks.push(ok ? '🟩' : '🟥');
+    if (!ok && g.mistakes.length < 12) g.mistakes.push({ tid: q.tid, cat: q.cat, sub: q.sub, prompt: q.prompt, emph: q.optKind ? null : q.emph, passage: q.passage, ans: q.optKind ? null : q.ans, mine: i >= 0 && !q.optKind ? q.opts[i] : null, why: q.why, steps: q.steps, tip: q.tip, vis: !!q.vis });
     const whyHasAns = q.why.toLowerCase().includes(String(q.ans).toLowerCase());
     g.feedback = { ok, fast: ok && secs < 3, text: ok ? (g.combo >= 3 ? `🔥 ${g.combo} COMBO · ${q.why}` : `Nice! ${q.why}`) : (i < 0 ? `⏱ Time's up · ${q.optKind ? q.why : `Answer: ${q.ans}`}` : q.optKind || whyHasAns ? `✕ ${q.why}` : `Answer: ${q.ans} · ${q.why}`) };
     g.qi += 1;
@@ -665,21 +763,31 @@ function App() {
       if (out === 1) { P.winStreak = (P.winStreak || 0) + 1; P.lossStreak = 0; } else if (out === 0) { P.lossStreak = (P.lossStreak || 0) + 1; P.winStreak = 0; }
       P.todayBest = { day: today, score: Math.max(g.me, P.todayBest && P.todayBest.day === today ? P.todayBest.score : 0) };
       P.lastRival = { name: g.rival, av: g.rivalAv, score: g.rivalScore };
+      if (!forfeit) P.recent = [...(P.recent || []), { me: g.me, out }].slice(-8);
+      P.sinceChallenge = g.plan && g.plan.type === 'challenge' ? 0 : (P.sinceChallenge || 0) + 1;
     }
     if (g.kind === 'daily') P.daily = { day: today, correct: g.correct, time: elapsed.toFixed(1), marks: g.marks };
     const finished = g.paced ? g.qi >= g.total : true;
     const ev = { kind: g.kind, win: out === 1, correct: g.correct, answered: g.answered, total: g.total, finished, maxCombo: g.maxCombo, fastCount: g.fastCount, under2: g.under2, catCorrect: Object.fromEntries(Object.entries(g.catStats).map(([k, v]) => [k, v.c])) };
-    // personal bests
-    const pbs = [];
-    const beat = (key, val, label, lower = false) => { if (val == null) return; const old = P.pb[key]; if (old == null || (lower ? val < old : val > old)) { if (old != null && (lower ? true : val > 0)) pbs.push(label); P.pb[key] = val; } };
-    if (g.kind === 'blitz' && !forfeit) beat('blitz', g.me, `Best Blitz: ${g.me}`);
-    beat('combo', g.maxCombo || null, `Longest combo: ${g.maxCombo}`);
-    if (g.fastest != null) beat('fastest', Math.round(g.fastest * 10) / 10, `Fastest answer: ${g.fastest.toFixed(1)}s`, true);
-    beat('rating', P.score, `Highest rating: ${P.score}`);
-    beat('streak', P.streak, `Longest streak: ${P.streak} days`);
-    if (g.kind === 'long' && finished) beat('long', g.points, `Best Long score: ${g.points}`);
-    if (g.kind === 'survival') { if (P.survivalBest && g.correct > P.survivalBest) pbs.push(`Survival best: ${g.correct}`); P.survivalBest = Math.max(P.survivalBest || 0, g.correct); }
-    if (g.kind === 'rush') { const old = P.rushBest[g.cat]; if (old != null && g.correct > old) pbs.push(`${CATS[g.cat].name} Rush best: ${g.correct}`); P.rushBest[g.cat] = Math.max(old || 0, g.correct); }
+    // Personal bests. Only this mode's main score can be a "NEW PERSONAL BEST" (the big banner),
+    // and only when it is strictly higher than every earlier score. Smaller records (longest combo,
+    // fastest answer, highest rating) are listed quietly as "records". Day streaks are not records here.
+    let mainPb = null; const records = [];
+    const beat = (key, val, lower = false) => {
+      if (val == null) return false; const old = P.pb[key];
+      const better = old == null || (lower ? val < old - 0.15 : val > old);
+      if (better) P.pb[key] = lower && old != null ? Math.min(old, val) : val;
+      return better && old != null && (lower || val > 0);
+    };
+    if (g.kind === 'blitz' && !forfeit && beat('blitz', g.me)) mainPb = `Best Blitz score: ${g.me} (was ${profileRef.current.pb.blitz})`;
+    if (g.kind === 'long' && finished && beat('long', g.points)) mainPb = `Best Long score: ${g.points}`;
+    if (g.kind === 'survival') { if (P.survivalBest && g.correct > P.survivalBest) mainPb = `Survival: ${g.correct} questions (was ${P.survivalBest})`; P.survivalBest = Math.max(P.survivalBest || 0, g.correct); }
+    if (g.kind === 'rush') { const old = P.rushBest[g.cat]; if (old != null && g.correct > old) mainPb = `${CATS[g.cat].name} Rush: ${g.correct} (was ${old})`; P.rushBest[g.cat] = Math.max(old || 0, g.correct); }
+    if (beat('combo', g.maxCombo || null)) records.push(`Longest combo ${g.maxCombo}`);
+    if (g.fastest != null && beat('fastest', Math.round(g.fastest * 10) / 10, true)) records.push(`Fastest answer ${g.fastest.toFixed(1)}s`);
+    if (g.kind === 'blitz' && out === 1 && beat('rating', P.score)) records.push(`Highest rating ${P.score}`);
+    P.pb.streak = Math.max(P.pb.streak || 0, P.streak);
+    const pbs = mainPb ? [mainPb] : [];
     // XP, missions, achievements
     const missions = advanceMissions(todayMissions(P), ev); P.missions = missions.list;
     const totals = { correct: CAT_KEYS.reduce((a, k) => a + ((H.cats[k] && H.cats[k].c) || 0), 0), quant: (H.cats.quant && H.cats.quant.c) || 0, logic: (H.cats.logic && H.cats.logic.c) || 0 };
@@ -705,21 +813,22 @@ function App() {
     } else if (g.kind === 'rush') {
       title = `${CATS[g.cat].name} Rush: ${g.correct}`; wit = acc >= 80 ? `${CATS[g.cat].name} on fire!` : 'Speed comes with reps. Run it back?'; mood = acc >= 80 ? 'party' : 'happy';
     } else {
-      title = `${CATS[g.cat].name} training done`; wit = acc >= 75 ? `Strong work. ${CATS[g.cat].name} is getting sharper.` : 'This is exactly how weak spots become strengths.'; mood = 'proud';
+      title = g.review ? 'Mistake review done' : `${CATS[g.cat].name} training done`; wit = acc >= 75 ? `Strong work. ${CATS[g.cat].name} is getting sharper.` : 'This is exactly how weak spots become strengths.'; mood = 'proud';
     }
     if (tierUp) { wit = `${pick(WIT.promo)} Welcome to ${tierOf(P.score).tier.name} ${tierOf(P.score).tier.icon}`; mood = 'party'; }
     else if (pbs.length && (g.kind === 'blitz' || g.kind === 'survival' || g.kind === 'rush')) wit = `${pick(WIT.pb)} ${wit}`;
     if (frozeUsed) wit = `🧊 Your Streak Freeze saved your ${P.streak - 1}-day streak! ${wit}`;
     const r = {
-      kind: g.kind, out, forfeit, acc, avg, me: g.me, rv: g.rv, rival: g.rival, rivalAv: g.rivalAv, correct: g.correct, answered: g.answered, total: g.total,
+      key: Date.now(), rivalScore: g.rivalScore, kind: g.kind, out, forfeit, acc, avg, me: g.me, rv: g.rv, rival: g.rival, rivalAv: g.rivalAv, correct: g.correct, answered: g.answered, total: g.total,
       time: elapsed.toFixed(1), marks: g.marks, points: g.points, finished, cat: g.cat, title, wit, mood,
       score: P.score, delta, streak: P.streak, xpGain, xpGame, xpFrom, xpTo: P.xp, levelUp: lvAfter.lv > lvBefore ? lvAfter.lv : null,
-      tierUp, pbs, achs, missions: missions.gained, cats, bonus,
+      tierUp, pbs, records, achs, missions: missions.gained, cats, bonus, mistakes: g.mistakes, review: g.review,
     };
     g.result = r; saveProfile(P); saveBrain(); reschedule(P);
     setCelebrate(g.kind === 'blitz' ? { from, to: P.score } : null);
     trophyAnim.setValue(0); xpAnim.setValue(levelOf(xpFrom).frac); setScreen('result');
     const big = out === 1 || tierUp || (g.kind === 'daily' && g.correct === 5) || r.levelUp || achs.length || pbs.length;
+    later(() => playSound(out === 1 || tierUp ? 'win' : g.kind === 'blitz' && !forfeit && out === 0 ? 'lose' : big ? 'reward' : 'correct'), 250);
     if (big) { setConfettiKey((k) => k + 1); haptic('success'); later(() => haptic('heavy'), 180); Animated.spring(trophyAnim, { toValue: 1, friction: 4, tension: 60, useNativeDriver: true }).start(); }
     else Animated.timing(trophyAnim, { toValue: 1, duration: 300, useNativeDriver: true }).start();
     later(() => Animated.timing(xpAnim, { toValue: r.levelUp ? 1 : lvAfter.frac, duration: 900, easing: Easing.out(Easing.cubic), useNativeDriver: false }).start(), 500);
@@ -851,6 +960,10 @@ function App() {
   }
 
   const lvl = levelOf(profile.xp);
+  const myRankName = rankName(profile.score); const visit = visitRef.current;
+  const frameStats = { streakBest: Math.max((profile.pb && profile.pb.streak) || 0, profile.streak || 0), wins: profile.wins || 0, level: lvl.lv, answered: histRef.current.total || 0 };
+  const myFrame = profile.frame && COSMETIC_BY_ID[profile.frame] && frameOwned(COSMETIC_BY_ID[profile.frame], frameStats, profile.frames) ? profile.frame : null;
+  const me = (size, reveal = null, plain = false) => <RankedAvatar i={profile.avatar} photo={profile.photo} size={size} rank={myRankName} frame={myFrame} reveal={reveal} plain={plain} />;
   const TopBar = (
     <View style={s.top}>
       <Logo />
@@ -1016,14 +1129,26 @@ function App() {
     const spinAv = RIVALS[(match.spin * 5) % RIVALS.length][1];
     body = (
       <View style={[s.matchWrap, { minHeight: winH - insets.top - 80 }]}>
-        {match.phase === 'search' ? (
+        {match.phase === 'ask' || match.phase === 'declined' ? (
+          <>
+            <Text style={s.label}>REMATCH</Text>
+            <WitArt mood={match.phase === 'declined' ? 'lose' : 'loading'} size={200} />
+            <Text style={s.matchTitle}>{match.phase === 'declined' ? `${match.rival.name} can't play right now` : `Waiting for ${match.rival.name} to accept…`}</Text>
+            <Text style={s.small}>{match.phase === 'declined' ? 'Finding you a new rival…' : 'Asking for a rematch'}</Text>
+            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 14 }}>
+              {me(64)}
+              <Text style={s.vsBig}>vs</Text>
+              <View style={{ opacity: match.phase === 'declined' ? 0.4 : 0.85 }}><RankedAvatar i={match.rival.av} size={64} rank={rankName(match.rival.score)} /></View>
+            </View>
+          </>
+        ) : match.phase === 'search' ? (
           <>
             <Text style={s.label}>BLITZ DUEL</Text>
             <WitArt mood="loading" size={230} />
             <Text style={s.matchTitle}>Finding a worthy rival…</Text>
             <Text style={s.small}>Matching around rating {profile.score - 60}–{profile.score + 60}</Text>
             <View style={{ flexDirection: 'row', alignItems: 'center', gap: 14 }}>
-              <Avatar i={profile.avatar} photo={profile.photo} size={64} ring={C.accent} />
+              {me(64)}
               <Text style={s.vsBig}>vs</Text>
               <View style={{ opacity: 0.85 }}><Avatar i={spinAv} size={64} ring={C.line} /></View>
             </View>
@@ -1032,10 +1157,12 @@ function App() {
           <>
             <Text style={s.label}>RIVAL FOUND</Text>
             <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12, marginTop: 20 }}>
-              <View style={{ alignItems: 'center', gap: 6, width: 120 }}><Avatar i={profile.avatar} photo={profile.photo} size={86} ring={C.accent} /><Text style={s.who} numberOfLines={1}>@{profile.name}</Text><Text style={s.chip}>{tierOf(profile.score).tier.icon} {profile.score}</Text></View>
+              <View style={{ alignItems: 'center', gap: 8, width: 124 }}>{me(86, `match-${match.key}-me`)}<Text style={s.who} numberOfLines={1}>@{profile.name}</Text><Text style={s.chip}>{tierOf(profile.score).tier.icon} {profile.score}</Text></View>
               <Text style={s.vsBig}>VS</Text>
-              <View style={{ alignItems: 'center', gap: 6, width: 120 }}><Avatar i={match.rival.av} size={86} ring={C.rival} /><Text style={s.who} numberOfLines={1}>{match.rival.name}</Text><Text style={[s.chip, { backgroundColor: C.rivalSoft }]}>{tierOf(match.rival.score).tier.icon} {match.rival.score}</Text></View>
+              <View style={{ alignItems: 'center', gap: 8, width: 124 }}><RankedAvatar i={match.rival.av} size={86} rank={rankName(match.rival.score)} reveal={`match-${match.key}-rv`} /><Text style={s.who} numberOfLines={1}>{match.rival.name}</Text><Text style={[s.chip, { backgroundColor: C.rivalSoft }]}>{tierOf(match.rival.score).tier.icon} {match.rival.score}</Text></View>
             </View>
+            {match.note ? <Text style={[s.small, { color: C.good, fontFamily: F.b }]}>{match.note}</Text> : null}
+            {match.rival.plan && match.rival.plan.type === 'challenge' ? <Text style={[s.chip, { backgroundColor: C.badSoft, color: C.bad, marginTop: 4 }]}>⚠️ Tough rival · a win here is worth more</Text> : null}
             {match.phase === 'count' ? <CountPop key={match.count} s={s} label={match.count > 0 ? String(match.count) : 'GO!'} /> : <WitArt mood="wow" size={140} />}
             <Text style={s.small}>60 seconds · most right answers wins</Text>
           </>
@@ -1151,14 +1278,68 @@ function App() {
           {rows.map((x, i) => (
             <View key={x.name + (x.me ? '_me' : '')} style={[s.boardRow, x.me && { backgroundColor: C.accentSoft }, i === rows.length - 1 && { borderBottomWidth: 0 }]}>
               <Text style={s.boardRank}>{i === 0 ? '🥇' : i === 1 ? '🥈' : i === 2 ? '🥉' : i + 1}</Text>
-              <Avatar i={x.av} photo={x.photo} size={36} />
-              <Text style={[s.boardName, x.me && { fontFamily: F.x }]} numberOfLines={1}>{x.me ? `${x.name} (you)` : x.name}</Text>
+              {x.me ? me(44, `board-${visit}-me`) : <RankedAvatar i={x.av} size={44} rank={rankName(aiRating(x.name))} reveal={i < 3 ? `board-${visit}-${x.name}` : null} />}
+              <Text style={[s.boardName, x.me && { fontFamily: F.x }]} numberOfLines={1}>{x.me ? `${x.name} (you)` : x.name} <Text style={s.small}>{tierOf(x.me ? profile.score : aiRating(x.name)).tier.icon}</Text></Text>
               <Text style={s.boardScore}>{x.score}</Text>
             </View>
           ))}
         </View>
         <Bouncy onPress={() => (cat ? startGame('rush', { cat }) : startGame('blitz'))} style={s.btn}><Text style={s.btnText}>{cat ? `🏃 ${CATS[cat].name} Rush` : '⚡ Play Blitz'}</Text></Bouncy>
         <Text style={s.foot}>Other players are Witlo's AI challengers until live matches launch.</Text>
+      </>
+    );
+  }
+
+  // ----- Frame collection -----
+  else if (screen === 'frames') {
+    withTabs = false;
+    const curTier = tierOf(profile.score).index;
+    const all = [...TIERS.map((t, ti) => ({ key: `r:${t.name}`, f: RANK_FRAMES[t.name], rank: true, ti, min: Math.max(1000, t.min) })), ...COSMETIC_FRAMES.map((f) => ({ key: `c:${f.id}`, f, rank: false }))];
+    const status = (x) => {
+      if (x.rank) return x.ti === curTier ? (myFrame ? 'Your rank' : 'Equipped') : x.ti < curTier ? 'Reached' : `Locked · ${x.min}+`;
+      if (profile.frame === x.f.id && myFrame) return 'Equipped';
+      return frameOwned(x.f, frameStats, profile.frames) ? 'Owned' : 'Locked';
+    };
+    const sel = all.find((x) => x.key === framePick) || all.find((x) => (myFrame ? x.key === `c:${myFrame}` : x.key === `r:${myRankName}`));
+    const selOwned = sel.rank ? false : frameOwned(sel.f, frameStats, profile.frames);
+    const prog = !sel.rank ? unlockProgress(sel.f, frameStats) : null;
+    const tile = (x) => {
+      const st = status(x); const on = sel.key === x.key; const locked = st.startsWith('Locked');
+      return (
+        <Pressable key={x.key} onPress={() => { haptic('tap'); playSound('tap'); setFramePick(x.key); }} style={[s.frameTile, on && { borderColor: C.accent, backgroundColor: C.accentSoft }]} accessibilityRole="button" accessibilityLabel={`${x.f.name} frame, ${st}`}>
+          <View style={{ opacity: locked ? 0.45 : 1 }}>
+            <RankedAvatar i={profile.avatar} photo={profile.photo} size={56} rank={x.rank ? x.f.name : 'Bronze'} frame={x.rank ? null : x.f.id} />
+          </View>
+          <Text style={s.frameName} numberOfLines={1}>{locked ? '🔒 ' : ''}{x.f.name}</Text>
+          <Text style={[s.frameStatus, st.startsWith('Equipped') && { color: C.good }]} numberOfLines={1}>{x.rank ? st : `${x.f.rarity} · ${st}`}</Text>
+        </Pressable>
+      );
+    };
+    body = (
+      <>
+        <View style={s.top}>
+          <Bouncy onPress={() => setScreen('me')} style={s.iconBtn} accessibilityLabel="Back"><Text style={s.iconBtnText}>←</Text></Bouncy>
+          <Text style={[s.h1, { flex: 1, marginLeft: 12 }]}>Avatar frames</Text>
+        </View>
+        <View style={[s.card, { alignItems: 'center', gap: 10 }]}>
+          <View style={{ marginVertical: 18 }}><RankedAvatar key={sel.key} i={profile.avatar} photo={profile.photo} size={120} rank={sel.rank ? sel.f.name : 'Bronze'} frame={sel.rank ? null : sel.f.id} reveal={`frames-${visit}-${sel.key}`} /></View>
+          <Text style={s.h2}>{sel.f.name}{sel.rank ? ' rank frame' : ''}</Text>
+          <Text style={[s.small, { textAlign: 'center' }]}>
+            {sel.rank ? (sel.ti <= curTier ? 'Rank frames show your real rank and change automatically as you climb.' : `Unlocks automatically when your rating reaches ${sel.min}. Win Blitz duels to climb.`)
+              : selOwned ? `${sel.f.rarity} cosmetic frame. Just for style: it never changes your rank, score or matchmaking.` : `${sel.f.rarity} · Unlock: ${sel.f.unlock.text}${prog ? ` (${prog.have}/${prog.need})` : ''}`}
+          </Text>
+          {!sel.rank && selOwned ? (
+            profile.frame === sel.f.id
+              ? <Bouncy onPress={() => saveProfile({ ...profileRef.current, frame: null })} style={[s.btnGhost, { paddingHorizontal: 22 }]}><Text style={s.btnGhostText}>Use my rank frame instead</Text></Bouncy>
+              : <Bouncy onPress={() => { saveProfile({ ...profileRef.current, frame: sel.f.id }); playSound('reward'); haptic('success'); }} style={[s.btn, { paddingHorizontal: 30 }]}><Glow /><Text style={s.btnText}>Equip {sel.f.name}</Text></Bouncy>
+          ) : null}
+          {sel.rank && myFrame && sel.ti === curTier ? <Bouncy onPress={() => saveProfile({ ...profileRef.current, frame: null })} style={[s.btnGhost, { paddingHorizontal: 22 }]}><Text style={s.btnGhostText}>Show my rank frame</Text></Bouncy> : null}
+        </View>
+        <Text style={s.label}>RANK FRAMES · EARNED BY CLIMBING</Text>
+        <View style={s.frameGrid}>{all.filter((x) => x.rank).map(tile)}</View>
+        <Text style={s.label}>COSMETIC FRAMES · JUST FOR STYLE</Text>
+        <View style={s.frameGrid}>{all.filter((x) => !x.rank).map(tile)}</View>
+        <Text style={s.foot}>Cosmetic frames never affect rank, score or matchmaking. Your real rank always shows on your profile and next to your name.</Text>
       </>
     );
   }
@@ -1171,7 +1352,7 @@ function App() {
       <>
         <View style={s.top}><Text style={s.h1}>Profile</Text>{ThemeBtn}</View>
         <View style={[s.card, { alignItems: 'center' }]}>
-          <Avatar i={profile.avatar} photo={profile.photo} size={92} ring={C.accent} />
+          <View style={{ marginVertical: 14 }}>{me(100, `me-${visit}`)}</View>
           <Text style={s.h2}>@{profile.name}</Text>
           <View style={{ flexDirection: 'row', gap: 8, flexWrap: 'wrap', justifyContent: 'center' }}>
             <Text style={s.chip} onPress={() => setInfo('rank')}>{tier.icon} {tier.name} · {profile.score}</Text>
@@ -1181,6 +1362,9 @@ function App() {
           </View>
           <Bouncy onPress={() => { setDraftName(profile.name); setDraftAvatar(profile.avatar); setDraftPhoto(profile.photo); setAvTab(profile.avatar === -1 ? 'photo' : profile.avatar >= 100 ? 'characters' : 'emoji'); setScreen('setup'); }} style={[s.btnGhost, { paddingHorizontal: 22 }]}>
             <Text style={s.btnGhostText}>✏️ Edit name & avatar</Text>
+          </Bouncy>
+          <Bouncy onPress={() => setScreen('frames')} style={[s.btnGhost, { paddingHorizontal: 22 }]} accessibilityLabel="Avatar frames">
+            <Text style={s.btnGhostText}>🖼️ Avatar frames{myFrame ? ` · ${COSMETIC_BY_ID[myFrame].name}` : ''}</Text>
           </Bouncy>
         </View>
         <View style={[s.card, { flexDirection: 'row' }]}>
@@ -1220,6 +1404,10 @@ function App() {
           <Text style={s.settingText}>{mode === 'dark' ? '🌙 Dark mode' : '☀️ Light mode'}</Text>
           <Text style={[s.small, { color: C.accent }]}>Switch</Text>
         </Bouncy>
+        <Bouncy onPress={() => { const on = profile.sound === false; setSoundEnabled(on); saveProfile({ ...profileRef.current, sound: on }); if (on) later(() => playSound('correct'), 60); }} style={[s.card, s.settingRow]} sound={null} accessibilityLabel="Sound effects">
+          <Text style={s.settingText}>{profile.sound === false ? '🔇 Sound effects off' : '🔊 Sound effects on'}</Text>
+          <Text style={[s.small, { color: C.accent }]}>{profile.sound === false ? 'Turn on' : 'Turn off'}</Text>
+        </Bouncy>
         {remindersSupported() && (
           <Bouncy onPress={() => { if (profile.remindersOn) { saveProfile({ ...profileRef.current, remindersOn: false }); cancelReminders(); } else turnOnReminders(); }} style={[s.card, s.settingRow]}>
             <Text style={s.settingText}>{profile.remindersOn ? '🔔 Daily reminders on' : '🔕 Daily reminders off'}</Text>
@@ -1245,7 +1433,7 @@ function App() {
     const step = `${Math.min(g.qi + (g.feedback ? 0 : 1), g.total)}/${g.total}`;
     const head = g.kind === 'blitz' ? null : g.kind === 'daily' ? ['📅', 'Daily 5', C.lilac, step]
       : g.kind === 'long' ? ['🌊', LONG_MODES[g.total].title, C.deepSoft, step]
-        : g.kind === 'train' ? [CATS[g.cat].icon, `Train ${CATS[g.cat].name}`, C.mint, step]
+        : g.kind === 'train' ? (g.review ? ['🧠', 'Review', C.mint, step] : [CATS[g.cat].icon, `Train ${CATS[g.cat].name}`, C.mint, step])
           : g.kind === 'rush' ? [CATS[g.cat].icon, `${CATS[g.cat].name} Rush`, C.mint, profile.rushBest && profile.rushBest[g.cat] ? `Best ${profile.rushBest[g.cat]}` : '']
             : ['❤️', 'Survival', C.badSoft, `${'❤️'.repeat(Math.max(0, g.lives))}${'🖤'.repeat(Math.max(0, 3 - g.lives))}`];
     const renderOpt = (i) => {
@@ -1271,7 +1459,7 @@ function App() {
         </View>
         <View style={s.hud}>
           <View style={[s.player, { backgroundColor: C.accentSoft }]}>
-            <Avatar i={profile.avatar} photo={profile.photo} size={34} />
+            {me(34, null, true)}
             <View style={{ flex: 1 }}><Text style={s.who} numberOfLines={1}>{profile.name}</Text>{g.combo >= 2 ? <Text style={[s.small, { color: C.accent, fontFamily: F.x }]}>🔥 {g.combo} combo</Text> : null}</View>
             <View>
               <Text style={[s.hudScore, { color: C.accent }]}>{g.paced ? g.points : g.me}</Text>
@@ -1286,7 +1474,7 @@ function App() {
             </View>
           ) : (
             <View style={[s.player, { backgroundColor: C.rivalSoft }]}>
-              <Avatar i={g.rivalAv} size={34} />
+              <RankedAvatar i={g.rivalAv} size={34} rank={rankName(g.rivalScore || 1000)} plain />
               <View style={{ flex: 1 }}><Text style={s.who} numberOfLines={1}>{g.rival}</Text></View>
               <Animated.View style={{ transform: [{ scale: g.rivalPop }] }}><Text style={[s.hudScore, { color: C.rival }]}>{g.rv}</Text></Animated.View>
               {g.reacts.filter((x) => x.who === 'rv').slice(-2).map((x) => <FloatReact key={x.key} e={x.e} side="right" />)}
@@ -1306,7 +1494,7 @@ function App() {
         ) : null}
 
         <View>
-          <Animated.View style={[s.qCard, { opacity: q.enter, transform: [{ translateX: q.enter.interpolate({ inputRange: [0, 1], outputRange: [16, 0] }) }] }]}>
+          <Animated.View style={[s.qCard, q.passage && { minHeight: 0 }, { opacity: q.enter, transform: [{ translateX: q.enter.interpolate({ inputRange: [0, 1], outputRange: [16, 0] }) }] }]}>
             <View style={s.qTop}>
               <Text style={s.typeChip} numberOfLines={1}>{CATS[q.cat].icon} {q.sub}</Text>
               <Text style={s.levelChip}>{LEVELS[q.level]}</Text>
@@ -1330,7 +1518,7 @@ function App() {
             {q.steps ? (showSteps ? <Text style={s.fbText}>{q.steps}</Text> : (
               <Pressable onPress={() => setShowSteps(true)} accessibilityRole="button" hitSlop={8}><Text style={[s.fbText, { color: C.rival, fontFamily: F.b }]}>Show full solution ›</Text></Pressable>
             )) : null}
-            <Bouncy onPress={nextPaced} style={[s.btn, { marginTop: 4 }]}><Text style={s.btnText}>{g.qi >= g.total ? 'See results' : 'Next question →'}</Text></Bouncy>
+            {q.tip ? <Text style={s.fbText}><Text style={{ fontFamily: F.x }}>💡 Exam shortcut: </Text>{q.tip}</Text> : null}
           </View>
         ) : !g.paced ? (
           <Text style={[s.fb, g.feedback && { color: g.feedback.ok ? C.good : C.bad }]}>{g.feedback ? g.feedback.text : ' '}</Text>
@@ -1352,6 +1540,7 @@ function App() {
       ? { label: `⚡ Rematch ${r.rival}`, go: () => startGame('blitz', { rematch: true }) }
       : r.kind === 'daily' ? { label: '⚡ Play Blitz', go: () => startGame('blitz') }
         : { label: '▶ Play again', go: () => startGame(r.kind, r.kind === 'long' ? { n: r.total } : r.cat ? { cat: r.cat } : {}) };
+    if (r.review) { again.label = '🎯 Train weak spot'; again.go = () => startGame('train', { cat: weakCat, sub: weakSub }); }
     body = (
       <>
         <View ref={cardRef} collapsable={false} style={[s.resultCard, (win || r.tierUp) && { borderColor: C.gold, borderWidth: 3 }]}>
@@ -1365,9 +1554,9 @@ function App() {
           <Text style={[s.resTitle, (win || r.tierUp) && { color: C.gold }]}>{r.tierUp ? `Promoted to ${tier.name}!` : r.title}</Text>
           {r.kind === 'blitz' ? (
             <View style={s.versus}>
-              <View style={s.vsSide}><Avatar i={profile.avatar} photo={profile.photo} size={50} ring={win ? C.gold : null} /><Text style={[s.vsScore, { color: C.accent }]}>{r.me}</Text><Text style={s.who} numberOfLines={1}>@{profile.name}</Text></View>
+              <View style={s.vsSide}>{me(60, `res-${r.key}-me`)}<Text style={[s.vsScore, { color: C.accent }]}>{r.me}</Text><Text style={s.who} numberOfLines={1}>@{profile.name}</Text></View>
               <Text style={s.vsDash}>vs</Text>
-              <View style={s.vsSide}><Avatar i={r.rivalAv} size={50} /><Text style={[s.vsScore, { color: C.rival }]}>{r.rv}</Text><Text style={s.who} numberOfLines={1}>{r.rival}</Text></View>
+              <View style={s.vsSide}><RankedAvatar i={r.rivalAv} size={60} rank={rankName(r.rivalScore || 1000)} reveal={`res-${r.key}-rv`} /><Text style={[s.vsScore, { color: C.rival }]}>{r.rv}</Text><Text style={s.who} numberOfLines={1}>{r.rival}</Text></View>
             </View>
           ) : (
             <View style={{ alignItems: 'center', gap: 4 }}>
@@ -1413,9 +1602,21 @@ function App() {
           ) : doubleState === 'fail' ? <Text style={s.small}>The ad didn't finish, so no bonus this time.</Text> : null}
           {r.levelUp ? <View style={[s.bigBadge, { borderColor: C.rival, backgroundColor: C.rivalSoft }]}><Text style={{ fontSize: 22 }}>⭐</Text><Text style={s.bigBadgeText}>LEVEL UP! You're now Level {r.levelUp}</Text></View> : null}
           {r.pbs.map((p) => <View key={p} style={[s.bigBadge, { borderColor: C.gold, backgroundColor: C.goldSoft }]}><Text style={{ fontSize: 22 }}>🏅</Text><View style={{ flex: 1 }}><Text style={[s.label, { color: C.ink }]}>NEW PERSONAL BEST</Text><Text style={s.bigBadgeText}>{p}</Text></View></View>)}
+          {r.records && r.records.length ? <Text style={s.small}>📈 New record{r.records.length > 1 ? 's' : ''}: {r.records.join(' · ')}</Text> : null}
           {r.achs.map((a) => <View key={a.id} style={[s.bigBadge, { borderColor: C.accent, backgroundColor: C.accentSoft }]}><Text style={{ fontSize: 22 }}>{a.icon}</Text><View style={{ flex: 1 }}><Text style={[s.label, { color: C.ink }]}>ACHIEVEMENT UNLOCKED</Text><Text style={s.bigBadgeText}>{a.name} · {a.desc}</Text></View></View>)}
           {r.missions.map((m) => <View key={m.id} style={[s.bigBadge, { borderColor: C.good, backgroundColor: C.goodSoft }]}><Text style={{ fontSize: 22 }}>✅</Text><View style={{ flex: 1 }}><Text style={[s.label, { color: C.ink }]}>MISSION COMPLETE · +{m.xp} XP</Text><Text style={s.bigBadgeText}>{m.text}</Text></View></View>)}
         </View>
+
+        {r.mistakes && r.mistakes.length ? (
+          <View style={s.card}>
+            <View style={s.top}><Text style={s.label}>LEARN FROM THIS GAME</Text><Text style={s.small}>{r.mistakes.length} to review</Text></View>
+            {r.mistakes.slice(0, 3).map((m, i) => <MistakeRow key={`${m.tid}-${i}`} m={m} s={s} C={C} />)}
+            {r.mistakes.length > 3 ? <Text style={s.small}>+{r.mistakes.length - 3} more in the practice round</Text> : null}
+            <Bouncy onPress={() => startGame('train', { tids: [...new Set(r.mistakes.map((m) => m.tid))], cat: r.mistakes[0].cat, review: true })} style={s.btnGhost} accessibilityLabel="Practise your mistakes">
+              <Text style={s.btnGhostText}>🧠 Practise these with new numbers</Text>
+            </Bouncy>
+          </View>
+        ) : null}
 
         {r.cats.length ? (
           <View style={s.card}>
@@ -1426,7 +1627,7 @@ function App() {
 
         <View style={{ flexDirection: 'row', gap: 10 }}>
           <Bouncy onPress={shareImage} style={[s.btnGhost, { flex: 1 }]}><Text style={s.btnGhostText} numberOfLines={1}>📤 Share</Text></Bouncy>
-          <Bouncy onPress={() => shareText(r)} style={[s.btnGhost, { flex: 1 }]}><Text style={s.btnGhostText} numberOfLines={1}>💬 Challenge a friend</Text></Bouncy>
+          <Bouncy onPress={() => shareText(r)} style={[s.btnGhost, { flex: 1 }]}><Text style={s.btnGhostText} numberOfLines={1}>💬 Challenge</Text></Bouncy>
         </View>
         {shareState ? <Text style={s.fb}>{shareState}</Text> : null}
       </>
@@ -1436,10 +1637,12 @@ function App() {
   const TABS = [['home', '🏠', 'Home'], ['train', '🎯', 'Train'], ['board', '🏅', 'Leaders'], ['me', null, 'Profile']];
   const tabOn = screen === 'longpick' || screen === 'rushpick' ? 'home' : screen;
   const infoData = info ? (typeof info === 'string' ? INFO[info] : info) : null;
+  const gNow = gameRef.current;
+  const stickyNext = screen === 'game' && gNow && gNow.paced && !!gNow.feedback;
   return (
     <View style={safe}>{bar}
       <ScrollView
-        ref={scrollRef} style={{ flex: 1 }} contentContainerStyle={[s.wrap, !withTabs && { paddingBottom: insets.bottom + 28 }]} keyboardShouldPersistTaps="handled" scrollEventThrottle={64}
+        ref={scrollRef} style={{ flex: 1 }} contentContainerStyle={[s.wrap, !withTabs && { paddingBottom: insets.bottom + (stickyNext ? 110 : 28) }]} keyboardShouldPersistTaps="handled" scrollEventThrottle={64}
         onScroll={(e) => { const n = e.nativeEvent; scrollInfo.current = { ...scrollInfo.current, y: n.contentOffset.y, h: n.layoutMeasurement.height, ch: n.contentSize.height, lastMove: Date.now() }; if (hint) setHint(false); }}
         onLayout={(e) => { scrollInfo.current.h = e.nativeEvent.layout.height; }}
         onContentSizeChange={(w, h2) => { scrollInfo.current.ch = h2; }}
@@ -1449,11 +1652,16 @@ function App() {
         </Animated.View>
       </ScrollView>
       {hint ? (
-        <Animated.View style={[s.hint, { bottom: (withTabs ? 86 + insets.bottom : 24 + insets.bottom), transform: [{ translateY: hintAnim.interpolate({ inputRange: [0, 1], outputRange: [0, 6] }) }] }]}>
+        <Animated.View style={[s.hint, { bottom: (withTabs ? 86 + insets.bottom : stickyNext ? 96 + insets.bottom : 24 + insets.bottom), transform: [{ translateY: hintAnim.interpolate({ inputRange: [0, 1], outputRange: [0, 6] }) }] }]}>
           <Pressable onPress={() => { const si = scrollInfo.current; if (scrollRef.current) scrollRef.current.scrollTo({ y: si.y + si.h * 0.7, animated: true }); setHint(false); }} style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }} accessibilityRole="button" accessibilityLabel="Scroll down for more">
             <Text style={s.hintText}>Scroll for more</Text><Text style={[s.hintText, { fontSize: 16 }]}>⌄</Text>
           </Pressable>
         </Animated.View>
+      ) : null}
+      {stickyNext ? (
+        <View style={[s.nextBar, { paddingBottom: Math.max(insets.bottom, 10) + 6 }]}>
+          <Bouncy onPress={nextPaced} style={s.btn} accessibilityLabel="Next question"><Glow /><Text style={s.btnText}>{gNow.qi >= gNow.total ? 'See results' : 'Next question →'}</Text></Bouncy>
+        </View>
       ) : null}
       {withTabs && (
         <View style={[s.tabsBar, { paddingBottom: Math.max(insets.bottom, 8) }]}>
@@ -1461,7 +1669,7 @@ function App() {
             const on = tabOn === key;
             return (
               <Bouncy key={key} onPress={() => setScreen(key)} style={[s.tabBtn, on && { backgroundColor: C.accentSoft }]} accessibilityLabel={lab}>
-                {icon ? <Text style={{ fontSize: 22 }}>{icon}</Text> : <Avatar i={profile.avatar} photo={profile.photo} size={26} />}
+                {icon ? <Text style={{ fontSize: 22 }}>{icon}</Text> : me(26, null, true)}
                 <Text style={[s.tabLabel, on && { color: C.accent }]}>{lab}</Text>
               </Bouncy>
             );

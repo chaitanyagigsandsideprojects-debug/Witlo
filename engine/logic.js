@@ -268,13 +268,20 @@ export default [
     else if (kd === 'diff2') { const a = k.ri(2, 10); let d = k.ri(1, 3); const r = 2; t = [a]; for (let i = 1; i < 6; i++) { t.push(t[i - 1] + d); d *= r; } why = 'gaps double each time'; }
     else { const P = [2, 3, 5, 7, 11, 13, 17, 19, 23, 29, 31, 37, 41, 43, 47, 53, 59, 61]; const s = k.ri(0, P.length - 6); t = P.slice(s, s + 6); why = 'consecutive primes'; }
     const ans = t[5]; if (Math.abs(ans) > 99999) return null;
+    const P5 = t[4]; const dlt = t[5] - t[4];
+    const last = {
+      arith: `${P5} ${dlt > 0 ? '+' : '−'} ${Math.abs(dlt)} = ${ans}`, geo: `${P5} × ${t[5] / t[4]} = ${ans}`, gap: `gaps ${t.slice(1).map((v, i) => v - t[i]).join(', ')} → ${P5} + ${dlt} = ${ans}`,
+      sq: `next is ${Math.round(Math.sqrt(ans))}² = ${ans}`, cube: `next is ${Math.round(Math.cbrt(ans))}³ = ${ans}`, alt: `${P5} + ${dlt} = ${ans}`, x2c: `${P5} × ${(why.match(/×(\d)/) || [])[1]} ${why.includes('+') ? '+' : '−'} ${Math.abs(ans - P5 * Number((why.match(/×(\d)/) || [])[1]))} = ${ans}`,
+      fib: `${t[3]} + ${t[4]} = ${ans}`, mulinc: `${P5} × 6 = ${ans}`, twoser: `second series ${t[1]}, ${t[3]} → ${ans}`, xnplus: `${P5} × 2 + 5 = ${ans}`, diff2: `${P5} + ${dlt} = ${ans}`, sqc: `${why.replace('squares', `${Math.round(Math.sqrt(ans - Number(why.replace(/[^0-9]/g, '')) * (why.includes('−') ? -1 : 1)))}²`)} = ${ans}`,
+    }[kd] || `next is ${ans}`;
+    why = `${why}: ${last}`;
     return { prompt: 'What comes next?', emph: `${t.slice(0, 5).join(', ')}, ?`, ans, wrong: [ans + (t[5] - t[4]), t[4] + (t[4] - t[3]), ans + 1, ans - 1, ans + 2], step: Math.max(2, Math.round(Math.abs(t[5] - t[4]) / 3)), why, p: [kd, ...t], bump: kinds.indexOf(kd) * 12 };
   } }),
   Q({ id: 'l.series.wrong', sub: 'Number Series', lv: [2, 3], time: 30, gen(k) {
     const a = k.ri(2, 20), kd = k.pick(['add', 'mul', 'sq']); let t = [];
     if (kd === 'add') { const s = k.ri(3, 12); for (let i = 0; i < 6; i++) t.push(a + i * s); } else if (kd === 'mul') { const r = k.pick([2, 3]); t = [a]; for (let i = 1; i < 6; i++) t.push(t[i - 1] * r); } else { for (let i = 0; i < 6; i++) t.push((a + i) ** 2); }
     const i = k.ri(1, 5); const bad = t[i] + k.pick([1, 2, -1, -2, 3]); const shown = [...t]; shown[i] = bad; if (new Set(shown).size < 6) return null;
-    return { prompt: 'Which number is wrong in the series?', emph: shown.join(', '), ans: bad, opts: [bad, ...k.pickN(shown.filter((_, j) => j !== i), 3)], why: `should be ${t[i]}`, p: [kd, ...shown] };
+    return { prompt: 'Which number is wrong in the series?', emph: shown.join(', '), ans: bad, opts: [bad, ...k.pickN(shown.filter((_, j) => j !== i), 3)], why: `${kd === 'add' ? `+${t[1] - t[0]} each time` : kd === 'mul' ? `×${t[1] / t[0]} each time` : 'consecutive squares'}, so ${bad} should be ${t[i]}`, p: [kd, ...shown] };
   } }),
   Q({ id: 'l.series.letter', sub: 'Alphabet Series', lv: [1, 3], time: 15, gen(k, L) {
     const kd = k.pick(L >= 3 ? ['fwd', 'back', 'alt', 'grow'] : L === 2 ? ['fwd', 'back', 'alt'] : ['fwd']);
@@ -286,18 +293,18 @@ export default [
     const total = steps.reduce((x, y) => x + y, 0); const start = total > 0 ? k.ri(0, 25 - total) : k.ri(-total, 25);
     const idx = [start]; steps.forEach((s) => idx.push(idx[idx.length - 1] + s)); const t = idx.map((i) => A[i]); const ans = t[5];
     const opts = new Set([ans]); [1, -1, 2, -2, 3, -3].forEach((o) => { const c = A[idx[5] + o]; if (c && opts.size < 4) opts.add(c); });
-    return { prompt: 'What comes next?', emph: `${t.slice(0, 5).join(', ')}, ?`, ans, opts: [...opts], why, p: [kd, ...t] };
+    return { prompt: 'What comes next?', emph: `${t.slice(0, 5).join(', ')}, ?`, ans, opts: [...opts], why: `${why}: ${t[4]} (${idx[4] + 1}) ${steps[4] > 0 ? '+' : '−'} ${Math.abs(steps[4])} → ${ans} (${idx[5] + 1})`, p: [kd, ...t] };
   } }),
   Q({ id: 'l.series.alnum', sub: 'Alphanumeric Series', lv: [2, 3], time: 20, gen(k) {
     const ls = k.ri(1, 3), ns = k.ri(2, 5); const l0 = k.ri(1, 24 - 5 * ls), n0 = k.ri(1, 9);
     const t = Array.from({ length: 6 }, (_, i) => `${A[l0 + i * ls]}${n0 + i * ns}`); const ans = t[5];
-    return { prompt: 'What comes next?', emph: `${t.slice(0, 5).join(', ')}, ?`, ans, wrong: [`${A[l0 + 5 * ls + 1]}${n0 + 5 * ns}`, `${A[l0 + 5 * ls]}${n0 + 5 * ns + 1}`, `${A[l0 + 5 * ls - 1]}${n0 + 5 * ns}`, `${A[l0 + 5 * ls]}${n0 + 4 * ns}`], why: `letters +${ls}, numbers +${ns}`, p: [l0, ls, n0, ns] };
+    return { prompt: 'What comes next?', emph: `${t.slice(0, 5).join(', ')}, ?`, ans, wrong: [`${A[l0 + 5 * ls + 1]}${n0 + 5 * ns}`, `${A[l0 + 5 * ls]}${n0 + 5 * ns + 1}`, `${A[l0 + 5 * ls - 1]}${n0 + 5 * ns}`, `${A[l0 + 5 * ls]}${n0 + 4 * ns}`], why: `letters +${ls} (${A[l0 + 4 * ls]} → ${A[l0 + 5 * ls]}), numbers +${ns} (${n0 + 4 * ns} → ${n0 + 5 * ns}) → ${ans}`, p: [l0, ls, n0, ns] };
   } }),
   Q({ id: 'l.analogy.num', sub: 'Number Analogy', lv: [1, 3], time: 15, gen(k, L) {
     const kd = k.pick(L >= 2 ? ['sq', 'cube', 'mul', 'sqp', 'sqm'] : ['sq', 'mul', 'add']); const f = { sq: (x) => x * x, cube: (x) => x ** 3, sqp: (x) => x * x + 1, sqm: (x) => x * x - x };
     let a = k.ri(2, 9), b = k.ri(3, 12); if (b === a) b++; let fn; let why; if (kd === 'cube') { a = k.ri(2, 5); b = k.ri(3, 7); if (a === b) b++; }
     if (kd === 'mul') { const m = k.ri(3, 9); fn = (x) => x * m; why = `× ${m}`; } else if (kd === 'add') { const m = k.ri(5, 25); fn = (x) => x + m; why = `+ ${m}`; } else { fn = f[kd]; why = { sq: 'square', cube: 'cube', sqp: 'square + 1', sqm: 'n² − n' }[kd]; }
-    return { prompt: 'Find the missing number', emph: `${a} : ${fn(a)} :: ${b} : ?`, ans: fn(b), wrong: [fn(b) + 1, fn(b) - b, fn(b + 1), b * a], step: Math.max(2, Math.round(fn(b) / 10)), why: `rule: ${why}`, p: [kd, a, b, fn(a)] };
+    return { prompt: 'Find the missing number', emph: `${a} : ${fn(a)} :: ${b} : ?`, ans: fn(b), wrong: [fn(b) + 1, fn(b) - b, fn(b + 1), b * a], step: Math.max(2, Math.round(fn(b) / 10)), why: { sq: `${a}² = ${fn(a)}, so ${b}² = ${fn(b)}`, cube: `${a}³ = ${fn(a)}, so ${b}³ = ${fn(b)}`, sqp: `${a}² + 1 = ${fn(a)}, so ${b}² + 1 = ${fn(b)}`, sqm: `${a}² − ${a} = ${fn(a)}, so ${b}² − ${b} = ${fn(b)}` }[kd] || `${a} ${why} = ${fn(a)}, so ${b} ${why} = ${fn(b)}`, p: [kd, a, b, fn(a)] };
   } }),
   Q({ id: 'l.odd.num', sub: 'Odd One Out', lv: [1, 3], time: 15, gen(k, L) {
     const kd = k.pick(L >= 2 ? ['mult', 'sq', 'prime', 'cube', 'digsum'] : ['mult', 'sq', 'even']); let group = []; let odd; let why;
@@ -317,12 +324,12 @@ export default [
     if (kd === 'num' || kd === 'pos') {
       const val = (w) => (kd === 'num' ? [...w].reduce((a, c) => a + A.indexOf(c) + 1, 0) : [...w].map((c) => A.indexOf(c) + 1).join(''));
       const ans = val(w2); const wrong = kd === 'num' ? [ans + 1, ans - 1, ans + 2, val(w2.slice(1))] : [[...w2].map((c) => A.indexOf(c) + 2).join(''), [...w2].reverse().map((c) => A.indexOf(c) + 1).join(''), [...w2].map((c) => 26 - A.indexOf(c)).join('')];
-      return { prompt: `If ${w1} = ${val(w1)}, then ${w2} = ?`, ans: kd === 'num' ? ans : String(ans), wrong: wrong.map(kd === 'num' ? Number : String), why: kd === 'num' ? 'add the alphabet positions of the letters' : 'write each letter\'s alphabet position', p: [kd, w1, w2] };
+      return { prompt: `If ${w1} = ${val(w1)}, then ${w2} = ?`, ans: kd === 'num' ? ans : String(ans), wrong: wrong.map(kd === 'num' ? Number : String), why: kd === 'num' ? `Add letter positions: ${[...w2].map((c) => `${c}${A.indexOf(c) + 1}`).join(' + ')} = ${ans}` : `Each letter → its position: ${[...w2].map((c) => `${c}=${A.indexOf(c) + 1}`).join(', ')} → ${ans}`, p: [kd, w1, w2] };
     }
     const s = kd === 'rev' ? 0 : k.chance(0.3) ? -k.ri(1, 3) : k.ri(1, 4);
     const enc = (w) => (kd === 'shift' ? sh(w, s) : kd === 'rev' ? [...w].reverse().join('') : kd === 'revshift' ? sh([...w].reverse().join(''), s) : [...w].map((c) => A[25 - A.indexOf(c)]).join(''));
     const ans = enc(w2); const wrong = [sh(w2, s + 1), sh(w2, s - 1 || -1), [...ans].reverse().join(''), sh(w2, -s), [...w2].reverse().join(''), sh(w2, 2)].filter((x) => x !== ans);
-    const why = { shift: `each letter ${s > 0 ? '+' : '−'}${Math.abs(s)}`, rev: 'letters written in reverse', revshift: `reverse, then each letter ${s > 0 ? '+' : '−'}${Math.abs(s)}`, opp: 'each letter → its opposite (A↔Z, B↔Y…)' }[kd];
+    const why = `${{ shift: `Each letter moves ${s > 0 ? '+' : '−'}${Math.abs(s)} (${w1[0]} → ${enc(w1)[0]})`, rev: `The letters are written in reverse (${w1} → ${enc(w1)})`, revshift: `Reverse the word, then move each letter ${s > 0 ? '+' : '−'}${Math.abs(s)}`, opp: `Each letter → its opposite in the alphabet: A = Z, B = Y … (${w1[0]} → ${enc(w1)[0]})` }[kd]}, so ${w2} → ${ans}`;
     return { prompt: `If ${w1} is coded as ${enc(w1)}, how is ${w2} coded?`, ans, wrong, why, p: [kd, s, w1, w2], words: true };
   } }),
 
@@ -333,7 +340,7 @@ export default [
   Q({ id: 'l.dir.turn', sub: 'Direction Sense', lv: [1, 2], time: 15, gen(k, L) {
     const D4 = ['North', 'East', 'South', 'West']; let f = k.ri(0, 3); const start = D4[f]; const moves = []; const who = k.pick(NAMES);
     for (let i = 0; i < 2 + L; i++) { const m = k.pick(L >= 2 ? ['right', 'left', 'around'] : ['right', 'left']); moves.push(m); f = (f + (m === 'right' ? 1 : m === 'left' ? 3 : 2)) % 4; }
-    return { prompt: `${who} faces ${start}, then ${moves.map((m) => (m === 'around' ? 'turns around' : `turns ${m}`)).join(', then ')}. Which way now?`, ans: D4[f], opts: D4, why: `${moves.join(' → ')} from ${start}`, p: [start, ...moves], words: true };
+    return { prompt: `${who} faces ${start}, then ${moves.map((m) => (m === 'around' ? 'turns around' : `turns ${m}`)).join(', then ')}. Which way now?`, ans: D4[f], opts: D4, why: (() => { let g = D4.indexOf(start); const path = [start]; moves.forEach((m) => { g = (g + (m === 'right' ? 1 : m === 'left' ? 3 : 2)) % 4; path.push(D4[g]); }); return path.join(' → '); })(), steps: 'Right turn = 90° clockwise, left = 90° anticlockwise, turning around = 180°.', p: [start, ...moves], words: true };
   } }),
   Q({ id: 'l.dir.dist', sub: 'Direction Sense', lv: [2, 3], time: 35, gen(k, L) {
     const T = k.pick([[3, 4, 5], [6, 8, 10], [5, 12, 13], [8, 15, 17], [9, 12, 15]]); const sx = k.chance(0.5) ? 1 : -1, sy = k.chance(0.5) ? 1 : -1; const dx = sx * T[0], dy = sy * T[1];
@@ -342,19 +349,19 @@ export default [
     const dirIdx = (Math.round(((Math.atan2(dx, dy) * 180) / Math.PI + 360) / 45) % 8); const ang = (Math.atan2(dx, dy) * 180) / Math.PI; const dir = DIR8[(Math.round(((ang + 360) % 360) / 45) % 8)];
     const askDir = k.chance(0.4);
     if (askDir) { const ans = `${T[2]} km ${dir}`; return { prompt: `${who} walks ${legs.map(([d, n]) => `${n} km ${d}`).join(', then ')}. Where is ${who} now from the start?`, ans, wrong: [`${T[2]} km ${DIR8[(DIR8.indexOf(dir) + 2) % 8]}`, `${T[0] + T[1]} km ${dir}`, `${T[2]} km ${DIR8[(DIR8.indexOf(dir) + 4) % 8]}`, `${T[2] + 1} km ${dir}`], why: `net ${Math.abs(dx)} km ${dx > 0 ? 'E' : 'W'}, ${Math.abs(dy)} km ${dy > 0 ? 'N' : 'S'} → √(${T[0]}² + ${T[1]}²) = ${T[2]}`, p: [dx, dy, legs.length, 'd'], words: true, _: dirIdx }; }
-    return { prompt: `${who} walks ${legs.map(([d, n]) => `${n} km ${d}`).join(', then ')}. How far is ${who} from the start?`, ans: T[2], post: ' km', wrong: [T[0] + T[1], legs.reduce((a, [, n]) => a + n, 0), T[2] + 1], why: `net ${Math.abs(dx)} km and ${Math.abs(dy)} km at right angles → ${T[2]} km`, p: [dx, dy, legs.length] };
+    return { prompt: `${who} walks ${legs.map(([d, n]) => `${n} km ${d}`).join(', then ')}. How far is ${who} from the start?`, ans: T[2], post: ' km', wrong: [T[0] + T[1], legs.reduce((a, [, n]) => a + n, 0), T[2] + 1], why: `Net ${Math.abs(dx)} km ${dx > 0 ? 'East' : 'West'} and ${Math.abs(dy)} km ${dy > 0 ? 'North' : 'South'} → √(${T[0]}² + ${T[1]}²) = ${T[2]} km`, p: [dx, dy, legs.length] };
   } }),
 
   // ---------------- Ranking & order ----------------
   Q({ id: 'l.rank.pos', sub: 'Ranking', lv: [1, 2], time: 15, gen(k, L) {
-    const who = k.pick(NAMES); if (L === 1 || k.chance(0.5)) { const a = k.ri(3, 30), b = k.ri(3, 30); return { prompt: `${who} is ${ord(a)} from the left and ${ord(b)} from the right in a row. How many people are in the row?`, ans: a + b - 1, wrong: [a + b, a + b + 1, a + b - 2], why: `${a} + ${b} − 1 (${who} counted twice)`, p: ['row', a, b] }; }
-    const n = k.ri(20, 60), r = k.ri(3, n - 3); return { prompt: `In a class of ${n}, ${who} ranks ${ord(r)} from the top. Rank from the bottom?`, ans: n - r + 1, wrong: [n - r, n - r + 2, r + 1], why: `${n} − ${r} + 1`, p: ['class', n, r] };
+    const who = k.pick(NAMES); if (L === 1 || k.chance(0.5)) { const a = k.ri(3, 30), b = k.ri(3, 30); return { prompt: `${who} is ${ord(a)} from the left and ${ord(b)} from the right in a row. How many people are in the row?`, ans: a + b - 1, wrong: [a + b, a + b + 1, a + b - 2], why: `${a} + ${b} − 1 = ${a + b - 1} (${who} is counted in both)`, p: ['row', a, b] }; }
+    const n = k.ri(20, 60), r = k.ri(3, n - 3); return { prompt: `In a class of ${n}, ${who} ranks ${ord(r)} from the top. Rank from the bottom?`, ans: n - r + 1, wrong: [n - r, n - r + 2, r + 1], why: `${n} − ${r} + 1 = ${n - r + 1}`, p: ['class', n, r] };
   } }),
   Q({ id: 'l.rank.order', sub: 'Ranking', lv: [1, 3], time: 20, gen(k, L) {
     const n = L >= 3 ? 5 : 4; const ppl = k.pickN(NAMES, n); const [more, less, top, bottom] = k.pick([['taller', 'shorter', 'tallest', 'shortest'], ['older', 'younger', 'oldest', 'youngest'], ['richer', 'poorer', 'richest', 'poorest'], ['faster', 'slower', 'fastest', 'slowest'], ['heavier', 'lighter', 'heaviest', 'lightest']]);
     const facts = []; for (let i = 0; i < n - 1; i++) facts.push(k.chance(0.5) ? `${ppl[i]} is ${more} than ${ppl[i + 1]}` : `${ppl[i + 1]} is ${less} than ${ppl[i]}`);
     const t = k.pick(L >= 2 ? ['top', 'bottom', 'second'] : ['top', 'bottom']); const ans = t === 'top' ? ppl[0] : t === 'bottom' ? ppl[n - 1] : ppl[1];
-    return { prompt: `${k.shuffle(facts).join('. ')}.\nWho is ${t === 'top' ? `the ${top}` : t === 'bottom' ? `the ${bottom}` : `second ${top}`}?`, ans, wrong: ppl.filter((x) => x !== ans), why: `order: ${ppl.join(' > ')}`, p: [...ppl, t], words: true };
+    return { prompt: `${k.shuffle(facts).join('. ')}.\nWho is ${t === 'top' ? `the ${top}` : t === 'bottom' ? `the ${bottom}` : `second ${top}`}?`, ans, wrong: ppl.filter((x) => x !== ans), why: `Chain the facts: ${ppl.join(' > ')} (each ${more} than the next) → ${ans}`, p: [...ppl, t], words: true };
   } }),
 
   // ---------------- Arrangements, scheduling, distribution ----------------
@@ -375,7 +382,7 @@ export default [
     const teams = []; for (let i = 0; i < 6; i++) for (let j = i + 1; j < 6; j++) for (let l = j + 1; l < 6; l++) teams.push([ppl[i], ppl[j], ppl[l]]);
     const ok = teams.filter((t) => cons.every((c2) => c2[1](t))); const bad = teams.filter((t) => !cons.every((c2) => c2[1](t)));
     if (!ok.length || bad.length < 3) return null; const right = k.pick(ok).join(', '); const wrongs = k.pickN(bad, 3).map((t) => t.join(', '));
-    return { prompt: 'Which team of 3 is possible?', passage: `A team of 3 is picked from ${ppl.join(', ')}.\n\n${cons.map((c2) => `• ${c2[0]}`).join('\n')}`, ans: right, opts: [right, ...wrongs], why: 'each other option breaks at least one rule', steps: 'Check each option against every rule; reject it at the first rule it breaks.', p: [ppl.join(), cons.map((x) => x[0]).join(), right], time: 90, words: true };
+    return { prompt: 'Which team of 3 is possible?', passage: `A team of 3 is picked from ${ppl.join(', ')}.\n\n${cons.map((c2) => `• ${c2[0]}`).join('\n')}`, ans: right, opts: [right, ...wrongs], why: `${right} satisfies every rule; each other team breaks at least one`, steps: 'Check each option against every rule; reject it at the first rule it breaks.', p: [ppl.join(), cons.map((x) => x[0]).join(), right], time: 90, words: true };
   } }),
 
   // ---------------- Syllogism, DS, deductions ----------------
@@ -397,7 +404,7 @@ export default [
   // ---------------- Clocks & calendars ----------------
   Q({ id: 'l.clock', sub: 'Clocks', lv: [1, 3], time: 20, gen(k, L) {
     const h = k.ri(1, 12); const m = L === 1 ? 0 : L === 2 ? k.pick([0, 30]) : 2 * k.ri(1, 29); let a = Math.abs(30 * h - 5.5 * m); a = Math.min(a, 360 - a);
-    return { prompt: 'Angle between the clock hands at', emph: `${h}:${String(m).padStart(2, '0')}`, ans: a, post: '°', wrong: [Math.abs(30 * h - 6 * m) % 360, a + 30, a - 15, 180 - a].filter((v) => v >= 0 && v <= 180), step: 15, why: `|30×${h} − 5.5×${m}| = ${a}°`, steps: 'Hour hand: 30° per hour + 0.5° per minute. Minute hand: 6° per minute. Subtract and take the smaller angle.', p: [h, m] };
+    return { prompt: 'Angle between the clock hands at', emph: `${h}:${String(m).padStart(2, '0')}`, ans: a, post: '°', wrong: [Math.abs(30 * h - 6 * m) % 360, a + 30, a - 15, 180 - a].filter((v) => v >= 0 && v <= 180), step: 15, why: `|30 × ${h} − 5.5 × ${m}| = |${30 * h} − ${5.5 * m}| = ${Math.abs(30 * h - 5.5 * m)}°${Math.abs(30 * h - 5.5 * m) > 180 ? ` → smaller angle 360 − ${Math.abs(30 * h - 5.5 * m)} = ${a}°` : ''}`, steps: 'Hour hand: 30° per hour + 0.5° per minute. Minute hand: 6° per minute. Subtract and take the smaller angle.', p: [h, m] };
   } }),
   Q({ id: 'l.clock.mirror', sub: 'Clocks', lv: [2, 3], time: 25, gen(k) {
     const h = k.ri(1, 11), m = 5 * k.ri(1, 11); let tot = 12 * 60 - (h * 60 + m); const rh = Math.floor(tot / 60) || 12, rm = tot % 60; const f = (a, b) => `${a}:${String(b).padStart(2, '0')}`;
@@ -405,8 +412,37 @@ export default [
     return { prompt: 'A clock seen in a mirror shows this time. What is the actual time?', emph: f(h, m), ans, wrong: [f(12 - h, m), f(rh, (60 - rm) % 60), f(h, 60 - m), f((rh % 12) + 1, rm), f(rh, (rm + 30) % 60), f(((rh + 10) % 12) + 1, rm)].filter((x) => x !== ans), why: `12:00 − ${f(h, m)} = ${ans}`, p: [h, m] };
   } }),
   Q({ id: 'l.calendar', sub: 'Calendars', lv: [1, 3], time: 20, gen(k, L) {
-    if (L <= 2) { const t = k.ri(0, 6); const n = L === 1 ? k.ri(2, 20) : k.ri(30, 400); return { prompt: `Today is ${DAYS[t]}. What day will it be after ${n} days?`, ans: DAYS[(t + n) % 7], wrong: DAYS, why: `${n} mod 7 = ${n % 7} days ahead`, p: [t, n], words: true }; }
+    if (L <= 2) { const t = k.ri(0, 6); const n = L === 1 ? k.ri(2, 20) : k.ri(30, 400); return { prompt: `Today is ${DAYS[t]}. What day will it be after ${n} days?`, ans: DAYS[(t + n) % 7], wrong: DAYS, why: `${n} = 7 × ${Math.floor(n / 7)} + ${n % 7} → ${n % 7} day${n % 7 === 1 ? '' : 's'} after ${DAYS[t]} is ${DAYS[(t + n) % 7]}`, p: [t, n], words: true }; }
     const y = k.ri(2001, 2031); const m = k.ri(1, 11); const d = k.ri(1, 28); const d0 = new Date(Date.UTC(y, 0, 1)); const d1 = new Date(Date.UTC(y, m, d)); const w0 = (d0.getUTCDay() + 6) % 7, w1 = (d1.getUTCDay() + 6) % 7; const diff = Math.round((d1 - d0) / 86400000);
-    return { prompt: `1 January ${y} was a ${DAYS[w0]}. What day was ${d} ${MONTHS[m]} ${y}?`, ans: DAYS[w1], wrong: DAYS, why: `${diff} days later; ${diff} mod 7 = ${diff % 7}`, steps: `Count days from 1 Jan to ${d} ${MONTHS[m]} (${y % 4 === 0 ? 'leap year: Feb has 29' : 'Feb has 28'}): ${diff}. ${diff} mod 7 = ${diff % 7}, so move ${diff % 7} days ahead of ${DAYS[w0]}.`, p: [y, m, d], words: true };
+    return { prompt: `1 January ${y} was a ${DAYS[w0]}. What day was ${d} ${MONTHS[m]} ${y}?`, ans: DAYS[w1], wrong: DAYS, why: `${diff} days later; ${diff} mod 7 = ${diff % 7} → ${diff % 7} day${diff % 7 === 1 ? '' : 's'} after ${DAYS[w0]} is ${DAYS[w1]}`, steps: `Count days from 1 Jan to ${d} ${MONTHS[m]} (${y % 4 === 0 ? 'leap year: Feb has 29' : 'Feb has 28'}): ${diff}. ${diff} mod 7 = ${diff % 7}, so move ${diff % 7} days ahead of ${DAYS[w0]}.`, p: [y, m, d], words: true };
+  } }),
+  // ---------------- Coded inequalities (bank exams) ----------------
+  Q({ id: 'l.ineq', sub: 'Coded Inequalities', lv: [2, 4], time: 35, gen(k, L) {
+    const n = L >= 4 ? 6 : 5; const letters = k.pickN('ABCDEFGHJKLMNPQRSTUVWXYZ'.split(''), n);
+    const signs = Array.from({ length: n - 1 }, () => k.pick(['>', '≥', '=', '<', '≤', '>', '<']));
+    if (signs.every((x) => x === '=')) return null;
+    // relation between positions i < j: '>', '≥', '=', '<', '≤' or null (no relation)
+    const rel = (i, j) => { const seg = signs.slice(i, j); const up = seg.some((x) => x === '>' || x === '≥'); const dn = seg.some((x) => x === '<' || x === '≤'); if (up && dn) return null; if (!up && !dn) return '='; if (up) return seg.includes('>') ? '>' : '≥'; return seg.includes('<') ? '<' : '≤'; };
+    const flip = { '>': '<', '<': '>', '≥': '≤', '≤': '≥', '=': '=' };
+    const pairs = []; for (let i = 0; i < n; i++) for (let j = i + 2; j < n; j++) pairs.push([i, j]);
+    // a conclusion "X op Y" that clearly follows or clearly doesn't (never the debatable '≥' after a strict '>')
+    const concl = (i, j, wantTrue) => {
+      const r = rel(i, j); const swap = k.chance(0.5); const X = swap ? letters[j] : letters[i], Y = swap ? letters[i] : letters[j]; const R = r && swap ? flip[r] : r;
+      if (wantTrue) { if (!R) return null; return { text: `${X} ${R} ${Y}`, ok: true, X, Y, R }; }
+      const choices = R == null ? ['>', '<', '=', '≥', '≤'] : { '>': ['<', '=', '≤'], '<': ['>', '=', '≥'], '=': ['>', '<'], '≥': ['<', '≤', '>', '='], '≤': ['>', '≥', '<', '='] }[R];
+      return { text: `${X} ${k.pick(choices)} ${Y}`, ok: false, X, Y, R };
+    };
+    const [p1, p2] = k.pickN(pairs, 2); if (!p1 || !p2) return null;
+    let c1, c2, either = false;
+    const ge = pairs.filter(([i, j]) => rel(i, j) === '≥' || rel(i, j) === '≤');
+    if (ge.length && k.chance(0.22)) { // complementary pair: X > Y and X = Y when only X ≥ Y is known
+      const [i, j] = k.pick(ge); const r = rel(i, j); const X = r === '≥' ? letters[i] : letters[j], Y = r === '≥' ? letters[j] : letters[i];
+      c1 = { text: `${X} > ${Y}`, ok: false }; c2 = { text: `${X} = ${Y}`, ok: false }; if (k.chance(0.5)) [c1, c2] = [c2, c1]; either = true;
+    } else { c1 = concl(p1[0], p1[1], k.chance(0.5)); c2 = concl(p2[0], p2[1], k.chance(0.5)); }
+    if (!c1 || !c2) return null;
+    const ans = either ? 'Either I or II follows' : c1.ok && c2.ok ? 'Both follow' : c1.ok ? 'Only I follows' : c2.ok ? 'Only II follows' : 'Neither follows';
+    const chain = letters.map((x, i) => (i ? `${signs[i - 1]} ${x}` : x)).join(' ');
+    const ex = (c) => { const [X, , Y] = c.text.split(' '); const i = letters.indexOf(X), j = letters.indexOf(Y); const r = i < j ? rel(i, j) : rel(j, i) && flip[rel(j, i)]; return `${X} ${r || '?'} ${Y}${r ? '' : ' (signs point both ways: no relation)'}`; };
+    return { prompt: 'Which conclusion(s) follow?', passage: `Statement: ${chain}\n\nConclusions:\nI. ${c1.text}\nII. ${c2.text}`, ans, opts: ['Only I follows', 'Only II follows', 'Either I or II follows', 'Neither follows', 'Both follow'], keepOrder: true, why: either ? `${ex(c1).replace(/ \(.*/, '')} is all we know, so exactly one of "${c1.text}" and "${c2.text}" must be true → Either` : `From the chain: I → ${ex(c1)}; II → ${ex(c2)} → ${ans}`, steps: 'Read the signs between the two letters. All pointing the same way: the strongest sign wins (any > makes it >). Signs pointing both ways (> and <): no relation. When only ≥ is known, "X > Y" and "X = Y" together make an Either pair.', p: [chain, c1.text, c2.text] };
   } }),
 ];

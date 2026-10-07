@@ -30,7 +30,7 @@ function figAnalogy(k) {
   const a = base(); let c = base(); if (c.split(':')[0] === a.split(':')[0]) c = base(); const ans = apply(c); if (ans === c) return null;
   const [s, r, f, n] = ans.split(':');
   const wrong = [c, spec(s, +r + 90, f, +n), spec(s, +r, f === 'f' ? 'o' : 'f', +n), spec(s, +r + 180, f, +n), spec(s, +r, f, +n + 1)].filter((x) => x !== ans);
-  return { prompt: 'Figure 1 changes into Figure 2. Apply the same change to Figure 3.', vis: { kind: 'figana', items: [a, apply(a), c, '?'] }, ans, wrong, optKind: 'shape', why: { rot90: 'rotate 90° clockwise', rot180: 'rotate 180°', fill: 'switch filled ↔ outline', count: 'add one more', sides: 'add one side' }[t], p: [t, a, c] };
+  return { prompt: 'Figure 1 changes into Figure 2. Apply the same change to Figure 3.', vis: { kind: 'figana', items: [a, apply(a), c, '?'] }, ans, wrong, optKind: 'shape', why: { rot90: 'rotate 90° clockwise', rot180: 'rotate 180°', fill: 'switch between filled and outline', count: 'add one more', sides: 'add one side' }[t], p: [t, a, c] };
 }
 function figOdd(k, L) {
   const t = k.pick(L === 1 ? ['sides', 'fill'] : ['sides', 'mirror', 'fill']);
@@ -77,15 +77,15 @@ export default [
   Q({ id: 'g.dice', sub: 'Cubes & Dice', lv: [3, 4], fast: false, deep: true, gen: dice }),
   Q({ id: 'g.cube', sub: 'Cubes & Dice', lv: [2, 4], time: 30, gen(k) {
     const n = k.ri(3, 7); const t = k.pick([3, 2, 1, 0]); const ans = t === 3 ? 8 : t === 2 ? 12 * (n - 2) : t === 1 ? 6 * (n - 2) ** 2 : (n - 2) ** 3;
-    return { prompt: `A painted cube is cut into ${n}×${n}×${n} = ${n ** 3} small cubes. How many small cubes have ${t === 0 ? 'no painted face' : `exactly ${t} painted face${t > 1 ? 's' : ''}`}?`, ans, wrong: [8, 12 * (n - 2), 6 * (n - 2) ** 2, (n - 2) ** 3, 6 * n * n, 12 * n].filter((x) => x !== ans), why: { 3: 'only the 8 corners', 2: `edges: 12 × (${n}−2)`, 1: `face centres: 6 × (${n}−2)²`, 0: `the hidden core: (${n}−2)³` }[t], p: [n, t] };
+    return { prompt: `A painted cube is cut into ${n}×${n}×${n} = ${n ** 3} small cubes. How many small cubes have ${t === 0 ? 'no painted face' : `exactly ${t} painted face${t > 1 ? 's' : ''}`}?`, ans, wrong: [8, 12 * (n - 2), 6 * (n - 2) ** 2, (n - 2) ** 3, 6 * n * n, 12 * n].filter((x) => x !== ans), why: { 3: 'Only the 8 corner cubes have 3 painted faces', 2: `Edge cubes (not corners): 12 edges × (${n} − 2) = ${ans}`, 1: `Face centres: 6 faces × (${n} − 2)² = 6 × ${(n - 2) ** 2} = ${ans}`, 0: `The hidden core: (${n} − 2)³ = ${ans}` }[t], p: [n, t] };
   } }),
   Q({ id: 'g.fold', sub: 'Paper Folding', lv: [1, 3], time: 15, gen(k, L) {
     const f = k.ri(1, L + 1); const h = k.ri(1, 2 + (L >= 3 ? 1 : 0)); const ans = h * 2 ** f;
-    return { prompt: `A square paper is folded in half ${f} time${f > 1 ? 's' : ''}, then ${h} hole${h > 1 ? 's are' : ' is'} punched through all layers. How many holes when it's unfolded?`, ans, wrong: [h * f * 2, h + 2 ** f, h * 2 ** (f + 1), h * 2 ** (f - 1), 2 ** f].filter((x) => x !== ans), why: `each fold doubles the layers: ${h} × 2^${f}`, p: [f, h] };
+    return { prompt: `A square paper is folded in half ${f} time${f > 1 ? 's' : ''}, then ${h} hole${h > 1 ? 's are' : ' is'} punched through all layers. How many holes when it's unfolded?`, ans, wrong: [h * f * 2, h + 2 ** f, h * 2 ** (f + 1), h * 2 ** (f - 1), 2 ** f].filter((x) => x !== ans), why: `Each fold doubles the layers: ${f} fold${f > 1 ? 's' : ''} → 2^${f} = ${2 ** f} layers; ${h} hole${h > 1 ? 's' : ''} × ${2 ** f} = ${ans}`, p: [f, h] };
   } }),
   Q({ id: 'g.squares', sub: 'Figure Counting', lv: [2, 3], time: 25, gen(k, L) {
     const n = k.ri(2, L >= 3 ? 5 : 4); const rect = L >= 3 && k.chance(0.5); const sq = (n * (n + 1) * (2 * n + 1)) / 6; const re = ((n * (n + 1)) / 2) ** 2; const ans = rect ? re : sq;
-    return { prompt: `How many ${rect ? 'rectangles (including squares)' : 'squares of any size'} are in this ${n}×${n} grid?`, vis: { kind: 'gridlines', n }, ans, wrong: [n * n, rect ? sq : re, ans - n, ans + n, 2 * n * n].filter((x) => x !== ans), why: rect ? `choose 2 of ${n + 1} lines each way: ${(n * (n + 1)) / 2}²` : `1² + 2² + … + ${n}² = ${sq}`, p: [n, rect] };
+    return { prompt: `How many ${rect ? 'rectangles (including squares)' : 'squares of any size'} are in this ${n}×${n} grid?`, vis: { kind: 'gridlines', n }, ans, wrong: [n * n, rect ? sq : re, ans - n, ans + n, 2 * n * n].filter((x) => x !== ans), why: rect ? `Pick 2 of the ${n + 1} lines each way: ${n + 1}C2 = ${(n * (n + 1)) / 2}, so ${(n * (n + 1)) / 2} × ${(n * (n + 1)) / 2} = ${re}` : `${Array.from({ length: n }, (_, i) => `${n - i}×${n - i}: ${(i + 1) ** 2}`).join(', ')} → ${Array.from({ length: n }, (_, i) => (i + 1) ** 2).join(' + ')} = ${sq}`, p: [n, rect] };
   } }),
   Q({ id: 'g.matrix', sub: 'Matrix Puzzles', lv: [2, 3], time: 25, gen(k, L) {
     const rule = k.pick(L === 2 ? ['sum', 'diff'] : ['sum', 'prod', 'sqsum', 'colsum']); const rows = [];
@@ -93,18 +93,20 @@ export default [
     if (rule === 'colsum') { for (let i = 0; i < 3; i++) rows[i][2] = k.ri(2, 12); rows[2] = [rows[0][0] + rows[1][0], rows[0][1] + rows[1][1], rows[0][2] + rows[1][2]]; }
     const r = rule === 'colsum' ? 2 : k.ri(0, 2); const c = rule === 'colsum' ? k.ri(0, 2) : 2; const ans = rows[r][c];
     const grid = rows.map((row, i) => row.map((v, j) => (i === r && j === c ? '?' : String(v))));
-    return { prompt: 'Find the missing number', vis: { kind: 'grid', grid, num: true }, ans, wrong: [ans + 1, ans - 1, ans + 2, ans * 2].filter((x) => x > 0), why: { sum: 'in each row, 1st + 2nd = 3rd', diff: 'in each row, 3rd = difference of the first two', prod: 'in each row, 1st × 2nd = 3rd', sqsum: 'in each row, 1st² + 2nd = 3rd', colsum: 'in each column, top + middle = bottom' }[rule], p: [rule, ...rows.flat()] };
+    const R2 = rows[r]; const C2 = [rows[0][c], rows[1][c], rows[2][c]];
+    const how = { sum: `${R2[0]} + ${R2[1]} = ${R2[2]}`, diff: `|${R2[0]} − ${R2[1]}| = ${R2[2]}`, prod: `${R2[0]} × ${R2[1]} = ${R2[2]}`, sqsum: `${R2[0]}² + ${R2[1]} = ${R2[2]}`, colsum: `${C2[0]} + ${C2[1]} = ${C2[2]}` }[rule];
+    return { prompt: 'Find the missing number', vis: { kind: 'grid', grid, num: true }, ans, wrong: [ans + 1, ans - 1, ans + 2, ans * 2].filter((x) => x > 0), why: { sum: 'in each row, 1st + 2nd = 3rd', diff: 'in each row, 3rd = difference of the first two', prod: 'in each row, 1st × 2nd = 3rd', sqsum: 'in each row, 1st² + 2nd = 3rd', colsum: 'in each column, top + middle = bottom' }[rule] + `: ${how}`, p: [rule, ...rows.flat()] };
   } }),
   Q({ id: 'g.magic', sub: 'Matrix Puzzles', lv: [1, 2], time: 15, gen(k, L) {
     let m = [[2, 7, 6], [9, 5, 1], [4, 3, 8]]; const rot = (g) => g[0].map((_, i) => g.map((r) => r[i]).reverse()); for (let i = 0; i < k.ri(0, 3); i++) m = rot(m); if (k.chance(0.5)) m = m.map((r) => [...r].reverse());
     const add = L >= 2 ? k.ri(1, 15) : 0; const mul = L >= 2 && k.chance(0.4) ? 2 : 1; m = m.map((r) => r.map((v) => v * mul + add)); const S = 15 * mul + 3 * add; const r = k.ri(0, 2), c = k.ri(0, 2); const ans = m[r][c];
-    return { prompt: `Every row and column adds up to ${S}. Find ?`, vis: { kind: 'grid', grid: m.map((row, i) => row.map((v, j) => (i === r && j === c ? '?' : String(v)))), num: true }, ans, wrong: [ans + 1, ans - 1, ans + 2, ans - 2], why: `${S} − the other two = ${ans}`, p: [...m.flat(), r, c] };
+    return { prompt: `Every row and column adds up to ${S}. Find ?`, vis: { kind: 'grid', grid: m.map((row, i) => row.map((v, j) => (i === r && j === c ? '?' : String(v)))), num: true }, ans, wrong: [ans + 1, ans - 1, ans + 2, ans - 2], why: (() => { const o = m[r].filter((_, j) => j !== c); return `Row: ${S} − ${o[0]} − ${o[1]} = ${ans}`; })(), p: [...m.flat(), r, c] };
   } }),
   Q({ id: 'g.emoji', sub: 'Symbol Puzzles', lv: [1, 3], time: 15, gen(k, L) {
     const [x, y, z] = k.pickN(['🍎', '🍌', '🥥', '🍩', '🎈', '⭐', '🍕', '🌵', '🐟'], 3); const a = k.ri(2, 12); let b = k.ri(2, 12); if (b === a) b++; const c = k.ri(2, 12);
-    if (L >= 3) { const lines = [`${x} + ${x} + ${x} = ${3 * a}`, `${x} × ${y} = ${a * b}`, `${y} − ${z} = ${b - c}`]; return { prompt: `Crack the code. What is ${x} + ${y} + ${z}?`, emph: lines.join('\n'), emphSmall: true, ans: a + b + c, wrong: [a + b, a + b + c + 1, a * b, a + b - c], why: `${x}=${a}, ${y}=${b}, ${z}=${c}`, p: [a, b, c, 3] }; }
-    if (L === 2) { const lines = [`${x} + ${x} + ${x} = ${3 * a}`, `${x} + ${y} = ${a + b}`, `${y} + ${z} = ${b + c}`]; return { prompt: `Crack the code. What is ${z}?`, emph: lines.join('\n'), emphSmall: true, ans: c, wrong: [c + 1, c - 1, b, a].filter((v) => v > 0), why: `${x}=${a}, ${y}=${b}, ${z}=${c}`, p: [a, b, c, 2] }; }
-    const lines = [`${x} + ${x} = ${2 * a}`, `${x} + ${y} = ${a + b}`]; return { prompt: `Crack the code. What is ${y}?`, emph: lines.join('\n'), emphSmall: true, ans: b, wrong: [b + 1, b - 1, a, a + b].filter((v) => v > 0), why: `${x}=${a}, so ${y}=${b}`, p: [a, b, 1] };
+    if (L >= 3) { const lines = [`${x} + ${x} + ${x} = ${3 * a}`, `${x} × ${y} = ${a * b}`, `${y} − ${z} = ${b - c}`]; return { prompt: `Crack the code. What is ${x} + ${y} + ${z}?`, emph: lines.join('\n'), emphSmall: true, ans: a + b + c, wrong: [a + b, a + b + c + 1, a * b, a + b - c], why: `${x} = ${3 * a} ÷ 3 = ${a}; ${y} = ${a * b} ÷ ${a} = ${b}; ${z} = ${b} − ${b - c < 0 ? `(−${c - b})` : b - c} = ${c} → ${a} + ${b} + ${c} = ${a + b + c}`, p: [a, b, c, 3] }; }
+    if (L === 2) { const lines = [`${x} + ${x} + ${x} = ${3 * a}`, `${x} + ${y} = ${a + b}`, `${y} + ${z} = ${b + c}`]; return { prompt: `Crack the code. What is ${z}?`, emph: lines.join('\n'), emphSmall: true, ans: c, wrong: [c + 1, c - 1, b, a].filter((v) => v > 0), why: `${x} = ${3 * a} ÷ 3 = ${a}; ${y} = ${a + b} − ${a} = ${b}; ${z} = ${b + c} − ${b} = ${c}`, p: [a, b, c, 2] }; }
+    const lines = [`${x} + ${x} = ${2 * a}`, `${x} + ${y} = ${a + b}`]; return { prompt: `Crack the code. What is ${y}?`, emph: lines.join('\n'), emphSmall: true, ans: b, wrong: [b + 1, b - 1, a, a + b].filter((v) => v > 0), why: `${x} = ${2 * a} ÷ 2 = ${a}, so ${y} = ${a + b} − ${a} = ${b}`, p: [a, b, 1] };
   } }),
   Q({ id: 'g.pattern', sub: 'Pattern Completion', lv: [1, 3], time: 12, gen(k, L) {
     const set = k.shuffle(['🔺', '🔵', '🟩', '⭐', '💜', '🟧', '🔶', '⚪']); const len = L >= 2 ? k.pick([3, 4]) : 2; const cyc = set.slice(0, len); let seq; let why;
@@ -116,6 +118,6 @@ export default [
   Q({ id: 'g.count', sub: 'Visual Counting', lv: [1, 2], time: 12, gen(k, L) {
     const [target, ...fill] = k.pick([['🍎', '🍐', '🍊'], ['⭐', '✨', '🌙'], ['🐱', '🐶', '🐭'], ['🌸', '🌼', '🍀'], ['🚗', '🚕', '🚙'], ['🦉', '🐧', '🐦']]); const rows = L >= 2 ? 5 : 4; const n = k.ri(3, L >= 2 ? 11 : 7);
     const cells = k.shuffle([...Array(n).fill(target), ...Array.from({ length: rows * 5 - n }, () => k.pick(fill))]); const grid = []; for (let r = 0; r < rows; r++) grid.push(cells.slice(r * 5, r * 5 + 5));
-    return { prompt: `How many ${target} can you spot?`, vis: { kind: 'grid', grid }, ans: n, wrong: [n + 1, n - 1, n + 2].filter((v) => v > 0), why: `there are ${n}`, p: cells };
+    return { prompt: `How many ${target} can you spot?`, vis: { kind: 'grid', grid }, ans: n, wrong: [n + 1, n - 1, n + 2].filter((v) => v > 0), why: `${grid.map((row, i) => `row ${i + 1}: ${row.filter((x) => x === target).length}`).join(', ')} → ${n}`, p: cells };
   } }),
 ];

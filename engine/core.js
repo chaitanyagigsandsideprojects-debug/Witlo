@@ -61,7 +61,8 @@ export function kit(rand) {
   const chance = (p) => rand() < p;
   const ord = (n) => `${n}${n % 10 === 1 && n % 100 !== 11 ? 'st' : n % 10 === 2 && n % 100 !== 12 ? 'nd' : n % 10 === 3 && n % 100 !== 13 ? 'rd' : 'th'}`;
   const sn = (v) => (v < 0 ? `−${Math.abs(v)}` : String(v)); // true minus sign
-  return { rand, ri, pick, shuffle, pickN, chance, gcd, lcm, fact, nCr, isInt, fmtIN, frac, ord, sn };
+  const pn = (v) => (v < 0 ? `(−${Math.abs(v)})` : String(v)); // negatives in brackets inside expressions: 5 × (−4)
+  return { rand, ri, pick, shuffle, pickN, chance, gcd, lcm, fact, nCr, isInt, fmtIN, frac, ord, sn, pn };
 }
 
 /* ---------------- Options ----------------
@@ -75,6 +76,7 @@ function numericOptions(k, ans, wrong = [], step) {
     v = Math.round(v * 100) / 100;
     if (Number.isInteger(ans) && !Number.isInteger(v)) return;
     if (ans >= 0 && v < 0) return;
+    if (ans > 0 && v === 0) return; // 0 is never a believable distractor for a positive answer
     const key = String(v); if (seen.has(key)) return; seen.add(key); set.push(v);
   };
   add(ans);
@@ -86,12 +88,28 @@ function numericOptions(k, ans, wrong = [], step) {
   return set;
 }
 
+/* ---------------- Explanation polish ----------------
+   Explanations are written by templates as plain text; this makes them read like a textbook:
+   2^5 → 2⁵, a^(n−1) → a⁽ⁿ⁻¹⁾, "-8" → "−8" (true minus sign), tidy spaces.                    */
+const SUP = { 0: '⁰', 1: '¹', 2: '²', 3: '³', 4: '⁴', 5: '⁵', 6: '⁶', 7: '⁷', 8: '⁸', 9: '⁹', n: 'ⁿ', '−': '⁻', '-': '⁻', '+': '⁺', '(': '⁽', ')': '⁾', x: 'ˣ', r: 'ʳ', t: 'ᵗ' };
+const supify = (str) => [...str].map((c) => SUP[c] || c).join('');
+export function nice(text) {
+  if (!text || typeof text !== 'string') return text;
+  return text
+    .replace(/\^\(([0-9n+\-−xrt]+)\)/g, (m, e) => supify(`(${e})`))
+    .replace(/\^([0-9]+|n|x)/g, (m, e) => supify(e))
+    .replace(/(^|[\s(:=,×÷+])-(?=\d)/g, '$1−')
+    .replace(/[ \t]{2,}/g, ' ')
+    .trim();
+}
+
 /* ---------------- Build + validate ---------------- */
 export function build(T, k, L) {
   const raw = T.gen(k, L);
   if (!raw) return null;
   const pre = raw.pre || ''; const post = raw.post || '';
-  const show = (v) => (typeof v === 'number' ? `${pre}${fmtIN(v)}${post}` : String(v));
+  const fixMinus = raw.optKind ? (x) => x : (x) => x.replace(/(^|[\s(,])-(?=\d)/g, '$1−');
+  const show = (v) => (typeof v === 'number' ? `${pre}${fmtIN(v)}${post}` : fixMinus(String(v)));
   let opts;
   if (raw.opts) opts = raw.opts.map(show);
   else if (typeof raw.ans === 'number') opts = numericOptions(k, raw.ans, raw.wrong || [], raw.step).map(show);
@@ -107,7 +125,7 @@ export function build(T, k, L) {
   const diff = Math.min(1000, Math.max(1, (L - 1) * 250 + 60 + (raw.bump || 0) + k.ri(0, 90)));
   return {
     id: fp, near, tid: T.id, cat: T.cat, sub: T.sub, level: L, diff,
-    prompt: raw.prompt, emph: raw.emph, ans, opts, why: raw.why, steps: raw.steps || null,
+    prompt: nice(raw.prompt), emph: raw.optKind ? raw.emph : nice(raw.emph), ans, opts, why: nice(raw.why), steps: nice(raw.steps) || null, tip: raw.tip || T.tip || null,
     time: raw.time || T.time || (L <= 1 ? 10 : L === 2 ? 18 : L === 3 ? 45 : 90),
     vis: raw.vis || null, optKind: raw.optKind || null, words: raw.words || opts.some((o) => o.length > 9),
     emoji: raw.emoji || false, passage: raw.passage || null, emphSmall: raw.emphSmall || false,

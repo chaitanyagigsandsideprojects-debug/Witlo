@@ -216,14 +216,18 @@ const gid = (w) => { const k = String(w).toLowerCase(); if (GID[k] == null) GID[
 SYN.forEach(([w, a]) => { const x = gid(w), y = gid(a); if (x !== y) Object.keys(GID).forEach((k) => { if (GID[k] === y) GID[k] = x; }); });
 const same = (a, b) => gid(a) === gid(b);
 
+// rough word class from the ending, so distractors look like the answer (adjective with adjectives …)
+const cls = (w) => { const x = String(w).toLowerCase().split(' ')[0]; if (/ly$/.test(x)) return 'adv'; if (/(tion|sion|ness|ment|ity|ance|ence|ship|dom|hood|ism|ure|age|ery)$/.test(x)) return 'n'; if (/(ous|ful|ive|able|ible|ent|ant|al|ic|id|less|ish|ary|ile|ed|y|ing)$/.test(x)) return 'adj'; if (/(ate|ify|ise|ize|en)$/.test(x)) return 'v'; return '?'; };
+const sameCls = (list, a) => { const c = cls(a); if (c === '?') return list; const f = list.filter((x) => cls(x) === c); return f.length >= 6 ? f : list; };
+
 export default [
   Q({ id: 'v.syn', sub: 'Synonyms', time: 10, gen(k, L) {
     const pool = SYN.filter((x) => x[2] <= L + 0 && x[2] >= Math.max(1, L - 1)); const [w, a] = k.pick(pool.length ? pool : SYN);
-    return { prompt: 'Closest meaning of', emph: w.toUpperCase(), ans: a, wrong: SYN.map((x) => x[1]).filter((x) => !same(x, a) && !same(x, w)), why: `${w} means ${a.toLowerCase()}`, p: [w] };
+    return { prompt: 'Closest meaning of', emph: w.toUpperCase(), ans: a, wrong: sameCls(SYN.map((x) => x[1]).filter((x) => !same(x, a) && !same(x, w)), a), why: `${w} means ${a.toLowerCase()}`, p: [w] };
   } }),
   Q({ id: 'v.ant', sub: 'Antonyms', time: 10, gen(k, L) {
     const pool = ANT.filter((x) => x[2] <= L && x[2] >= Math.max(1, L - 1)); const [w, a] = k.pick(pool.length ? pool : ANT);
-    return { prompt: 'Opposite of', emph: w.toUpperCase(), ans: a, wrong: ANT.map((x) => x[1]).filter((x) => !same(x, a) && !same(x, w)), why: `${w} ↔ ${a}`, p: [w] };
+    return { prompt: 'Opposite of', emph: w.toUpperCase(), ans: a, wrong: sameCls(ANT.map((x) => x[1]).filter((x) => !same(x, a) && !same(x, w)), a), why: `${w} is the opposite of ${a.toLowerCase()}`, p: [w] };
   } }),
   Q({ id: 'v.vocab', sub: 'Vocabulary', time: 14, gen(k, L) {
     const pool = VOCAB.filter((x) => x[2] <= L && x[2] >= Math.max(1, L - 1)); const [w, m] = k.pick(pool.length ? pool : VOCAB); const rev = k.chance(0.4);
@@ -250,10 +254,10 @@ export default [
     ];
     for (const r of k.shuffle(rules)) { const m = r(w); if (m !== w && m.toLowerCase() !== w.toLowerCase()) muts.add(m); if (muts.size >= 3) break; }
     if (muts.size < 3) return null;
-    return { prompt: 'Which spelling is correct?', ans: w, opts: [w, ...[...muts].slice(0, 3)], why: `${w}`, p: [w, ...muts] };
+    return { prompt: 'Which spelling is correct?', ans: w, opts: [w, ...[...muts].slice(0, 3)], why: (() => { const d = [...new Set((w.match(/([a-z])\1/gi) || []).map((x) => x.toLowerCase()))]; const f = []; if (d.length) f.push(`double ${d.map((x) => x[0]).join(' and double ')}`); if (/ie/.test(w)) f.push('ie'); if (/ei/.test(w)) f.push('ei'); if (/ance$/.test(w)) f.push('ends -ance'); if (/ence$/.test(w)) f.push('ends -ence'); return `Correct spelling: ${w}${f.length ? ` (${f.join(', ')})` : ''}`; })(), p: [w, ...muts] };
   } }),
   Q({ id: 'v.idiom', sub: 'Idioms', lv: [2, 3], time: 12, gen(k) {
-    const [i, m] = k.pick(IDIOMS); return { prompt: 'What does this idiom mean?', emph: `“${i}”`, emphSmall: true, ans: m, wrong: IDIOMS.map((x) => x[1]).filter((x) => x !== m), why: m, p: [i] };
+    const [i, m] = k.pick(IDIOMS); return { prompt: 'What does this idiom mean?', emph: `“${i}”`, emphSmall: true, ans: m, wrong: IDIOMS.map((x) => x[1]).filter((x) => x !== m), why: `“${i}” means: ${m.charAt(0).toLowerCase()}${m.slice(1)}`, p: [i] };
   } }),
   Q({ id: 'v.oneword', sub: 'One-word Substitution', lv: [2, 3], time: 12, gen(k) {
     const [d, w] = k.pick(ONEWORD); return { prompt: `One word for: “${d}”`, ans: w, wrong: OW_POOL.filter((x) => x !== w && !ONEWORD.some(([d2, w2]) => w2 === x && d2 === d)), why: `${w}: ${d.toLowerCase()}`, p: [d] };
@@ -263,10 +267,14 @@ export default [
     const L = 'PQRS'; const label = (si) => L[lab.indexOf(si)];
     const order = (ord2) => ord2.map(label).join('');
     const ans = order([0, 1, 2, 3]); const wrongs = new Set(); while (wrongs.size < 3) { const o = order(k.shuffle([0, 1, 2, 3])); if (o !== ans) wrongs.add(o); }
-    return { prompt: 'Arrange the sentences in the right order', passage: lab.map((si, j) => `${L[j]}. ${s[si]}`).join('\n'), ans, opts: [ans, ...wrongs], why: `${ans}: ${s[0].slice(0, 40)}…`, steps: `Find the opening sentence (it introduces the subject), then follow time words and pronouns.\nOrder: ${s.join(' ')}`, p: [s[0], ...lab] };
+    return { prompt: 'Arrange the sentences in the right order', passage: lab.map((si, j) => `${L[j]}. ${s[si]}`).join('\n'), ans, opts: [ans, ...wrongs], why: `${ans}: it opens with “${s[0]}”, then each sentence follows from the one before`, steps: `Find the opening sentence (it introduces the subject), then follow time words and pronouns.\nOrder: ${s.join(' ')}`, p: [s[0], ...lab] };
   } }),
   Q({ id: 'v.rc', sub: 'Reading Comprehension', lv: [2, 4], fast: false, deep: true, time: 75, gen(k) {
     const [passage, qs] = k.pick(RC); const [q, a, ...w] = k.pick(qs);
-    return { prompt: q, passage, ans: a, opts: [a, ...w], why: 'see the relevant line in the passage', steps: 'Find the sentence the question points to; the right option restates it, while the wrong ones exaggerate, twist or add ideas not in the text.', p: [q] };
+    const STOP = new Set(['the', 'a', 'an', 'of', 'to', 'and', 'in', 'is', 'are', 'it', 'they', 'that', 'for', 'on', 'with', 'by', 'as', 'be', 'their', 'them', 'was', 'were', 'more', 'than', 'this']);
+    const words = (t) => t.toLowerCase().match(/[a-z]+/g).filter((x) => !STOP.has(x)).map((x) => x.slice(0, 5));
+    const aw = new Set(words(`${a} ${q}`)); const sents = passage.match(/[^.!?]+[.!?]/g) || [passage];
+    const best = sents.map((t) => [words(t).filter((x) => aw.has(x)).length, t.trim()]).sort((x, y) => y[0] - x[0])[0][1];
+    return { prompt: q, passage, ans: a, opts: [a, ...w], why: `The passage says: “${best}”`, steps: 'Find the sentence the question points to; the right option restates it, while the wrong ones exaggerate, twist or add ideas not in the text.', p: [q] };
   } }),
 ];
